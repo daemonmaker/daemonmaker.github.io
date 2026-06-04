@@ -9,7 +9,7 @@ Plain static files. No build step, no generator, no framework.
 
 - `index.html`
 - `style.css`
-- `assets/headshot.svg` (placeholder — see below)
+- `assets/headshot.jpg`
 
 ## Local preview
 
@@ -46,15 +46,12 @@ First-time setup (one-time, on github.com):
 
 Pages typically updates within ~30 seconds of a push.
 
-## Replacing the headshot
+## Updating the headshot
 
-The site ships with a neutral SVG placeholder at `assets/headshot.svg`. To use
-your real photo:
+The site uses `assets/headshot.jpg`. To replace it:
 
-1. Drop your image into `assets/` (e.g. `assets/headshot.jpg`).
-2. In `index.html`, change the `<img src="assets/headshot.svg" …>` to point at
-   the new filename.
-3. Commit and push.
+1. Replace `assets/headshot.jpg` with the new image.
+2. Commit and push.
 
 Recommended: a square-ish portrait against a white background, at least
 640×640 px.

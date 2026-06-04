@@ -78,7 +78,7 @@ a:focus-visible {
 
 .hero__photo {
   margin: 0;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 5;
   background-color: var(--surface);
   border-radius: var(--radius-photo);
   border: 1px solid var(--rule);
@@ -91,6 +91,7 @@ a:focus-visible {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center top;
 }
 
 .hero__copy {
