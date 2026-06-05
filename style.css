@@ -216,6 +216,19 @@ a:focus-visible {
   color: var(--text);
 }
 
+/* Experience */
+
+.experience {
+  padding: 3.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.experience__cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
 /* Footer */
 
 .footer {
@@ -262,12 +275,14 @@ a:focus-visible {
 
   .focus,
   .impact,
-  .current {
+  .current,
+  .experience {
     padding: 2.5rem 0;
   }
 
   .focus__list,
-  .impact__cards {
+  .impact__cards,
+  .experience__cards {
     grid-template-columns: 1fr;
     gap: 1rem;
   }
