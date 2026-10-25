@@ -163,6 +163,12 @@ body {
   color: var(--text-muted);
 }
 
+.login__status {
+  margin: 0 0 1rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
 .shell {
   max-width: var(--max-width);
   margin: 0 auto;

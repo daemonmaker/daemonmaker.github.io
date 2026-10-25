@@ -3,7 +3,6 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signOut,
@@ -44,6 +43,8 @@ const googleProvider = new GoogleAuthProvider();
 const viewLogin = document.getElementById("view-login");
 const viewApp = document.getElementById("view-app");
 const loginError = document.getElementById("login-error");
+const loginStatus = document.getElementById("login-status");
+const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
 const listSharedEl = document.getElementById("list-shared");
@@ -87,6 +88,17 @@ function setLoginError(message) {
   }
   loginError.hidden = false;
   loginError.textContent = message;
+}
+
+function setLoginBusy(busy, statusText = "") {
+  btnGoogleSignIn.disabled = busy;
+  if (statusText) {
+    loginStatus.hidden = false;
+    loginStatus.textContent = statusText;
+  } else {
+    loginStatus.hidden = true;
+    loginStatus.textContent = "";
+  }
 }
 
 function setAppMessage(message) {
@@ -503,17 +515,11 @@ async function removeItem(itemId) {
 
 async function signInWithGoogle() {
   setLoginError("");
+  setLoginBusy(true, "Redirecting to Google…");
   try {
-    await signInWithPopup(auth, googleProvider);
+    await signInWithRedirect(auth, googleProvider);
   } catch (error) {
-    const popupBlocked =
-      error.code === "auth/popup-blocked" ||
-      error.code === "auth/popup-closed-by-user" ||
-      error.code === "auth/cancelled-popup-request";
-    if (popupBlocked && error.code === "auth/popup-blocked") {
-      await signInWithRedirect(auth, googleProvider);
-      return;
-    }
+    setLoginBusy(false);
     setLoginError(error.message || "Sign-in failed.");
   }
 }
@@ -562,7 +568,7 @@ function endSession() {
   showLogin();
 }
 
-document.getElementById("btn-google-sign-in").addEventListener("click", () => {
+btnGoogleSignIn.addEventListener("click", () => {
   signInWithGoogle();
 });
 
@@ -592,16 +598,25 @@ btnSetDefault.addEventListener("click", () => {
 
 formAddItem.addEventListener("submit", addItem);
 
-getRedirectResult(auth).catch((error) => {
-  setLoginError(error.message || "Sign-in failed.");
-});
+async function initAuth() {
+  showLogin();
+  setLoginBusy(true, "Checking sign-in…");
 
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    startSession(user);
-  } else {
-    endSession();
+  try {
+    await getRedirectResult(auth);
+  } catch (error) {
+    setLoginBusy(false);
+    setLoginError(error.message || "Sign-in failed.");
   }
-});
 
-showLogin();
+  onAuthStateChanged(auth, (user) => {
+    setLoginBusy(false);
+    if (user) {
+      startSession(user);
+    } else {
+      endSession();
+    }
+  });
+}
+
+initAuth();

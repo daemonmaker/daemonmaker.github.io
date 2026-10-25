@@ -93,4 +93,6 @@ private to the owner. Only shared lists can be set as the global default.
    `lists` on `scope` + `ownerUid` (see [firestore.indexes.json](firestore.indexes.json)).
 
 Local preview: `python3 -m http.server 8000` then open `/grocery.html` (Firebase
-auth works on `localhost` when authorized).
+auth works on `localhost` when authorized). Sign-in uses **Google redirect**
+(full-page), not a popup, so it works reliably on GitHub Pages with current
+Chrome COOP behavior.
