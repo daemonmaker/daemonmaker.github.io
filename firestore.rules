@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function listData(listId) {
+      return get(/databases/$(database)/documents/lists/$(listId)).data;
+    }
+
+    function canAccessList(listId) {
+      let list = listData(listId);
+      return list.scope == 'shared' || list.ownerUid == request.auth.uid;
+    }
+
+    function isSharedListId(listId) {
+      return listData(listId).scope == 'shared';
+    }
+
+    match /config/app {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['defaultListId'])
+        && request.resource.data.defaultListId is string
+        && isSharedListId(request.resource.data.defaultListId);
+    }
+
+    match /lists/{listId} {
+      allow read: if isSignedIn()
+        && (resource.data.scope == 'shared'
+          || resource.data.ownerUid == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasAll(['name', 'scope', 'createdAt', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.scope in ['shared', 'personal']
+        && (
+          (request.resource.data.scope == 'shared'
+            && (!('ownerUid' in request.resource.data)
+              || request.resource.data.ownerUid == null))
+          || (request.resource.data.scope == 'personal'
+            && request.resource.data.ownerUid == request.auth.uid)
+        );
+
+      allow update: if isSignedIn()
+        && (resource.data.scope == 'shared'
+          || resource.data.ownerUid == request.auth.uid)
+        && request.resource.data.scope == resource.data.scope
+        && (
+          resource.data.scope == 'shared'
+          || request.resource.data.ownerUid == resource.data.ownerUid
+        );
+
+      allow delete: if isSignedIn()
+        && (resource.data.scope == 'shared'
+          || resource.data.ownerUid == request.auth.uid);
+
+      match /items/{itemId} {
+        allow read, delete: if isSignedIn() && canAccessList(listId);
+
+        allow create: if isSignedIn()
+          && canAccessList(listId)
+          && request.resource.data.keys().hasAll(['name', 'createdAt'])
+          && request.resource.data.name is string;
+
+        allow update: if isSignedIn()
+          && canAccessList(listId)
+          && request.resource.data.name is string;
+      }
+    }
+  }
+}

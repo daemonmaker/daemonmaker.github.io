@@ -10,6 +10,7 @@ Plain static files. No build step, no generator, no framework.
 - `index.html`
 - `style.css`
 - `assets/headshot.jpg`
+- `grocery.html`, `grocery.css`, `grocery.js` — shared grocery lists (Firebase)
 
 ## Local preview
 
@@ -62,3 +63,34 @@ The file `index.html` is short and self-contained. The page intentionally
 omits employer/project names and any specific metrics — keep it that way.
 LinkedIn is the only external contact link; do not add `mailto:` or GitHub
 links.
+
+## Grocery lists
+
+Unlisted app at [daemonmaker.github.io/grocery.html](https://daemonmaker.github.io/grocery.html)
+(not linked from the portfolio). Google sign-in via Firebase Auth; data in
+Firestore project `daemonmaker-grocery`.
+
+### Data model
+
+- **`config/app`** — `defaultListId`: the shared list everyone opens on sign-in.
+- **`lists/{listId}`** — `name`, `scope` (`shared` | `personal`), `ownerUid`
+  (personal only), timestamps. Bootstrap shared list id: `shared-grocery`
+  (name “Grocery”).
+- **`lists/{listId}/items/{itemId}`** — `name`, `createdAt`.
+
+Shared lists are visible and editable by any signed-in user. Personal lists are
+private to the owner. Only shared lists can be set as the global default.
+
+### Firebase console checklist (one-time)
+
+1. **Firestore** — create the database in **`us-west3` (Salt Lake City)**.
+2. **Authentication** — enable **Google** sign-in.
+3. **Authentication → Settings → Authorized domains** — add `daemonmaker.github.io`
+   and `localhost`.
+4. **Firestore → Rules** — copy from [firestore.rules](firestore.rules) and
+   publish.
+5. **Firestore → Indexes** — if prompted, create the composite index for
+   `lists` on `scope` + `ownerUid` (see [firestore.indexes.json](firestore.indexes.json)).
+
+Local preview: `python3 -m http.server 8000` then open `/grocery.html` (Firebase
+auth works on `localhost` when authorized).

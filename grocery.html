@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grocery lists</title>
+    <meta name="description" content="Shared and personal grocery lists." />
+    <link rel="stylesheet" href="grocery.css" />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <section id="view-login" class="login" hidden>
+        <div class="login__panel">
+          <p class="login__eyebrow">Lists</p>
+          <h1 class="login__title">Grocery</h1>
+          <p class="login__lead">
+            Sign in with Google to open the shared default list and your
+            personal lists.
+          </p>
+          <button id="btn-google-sign-in" class="btn btn--primary" type="button">
+            Sign in with Google
+          </button>
+          <p id="login-error" class="message message--error" hidden></p>
+        </div>
+      </section>
+
+      <section id="view-app" class="shell" hidden>
+        <header class="shell__header">
+          <div>
+            <p class="shell__eyebrow">Grocery</p>
+            <p id="user-label" class="shell__user"></p>
+          </div>
+          <button id="btn-sign-out" class="btn btn--ghost" type="button">
+            Sign out
+          </button>
+        </header>
+
+        <div class="shell__body">
+          <aside class="sidebar" aria-label="Lists">
+            <div class="sidebar__group">
+              <h2 class="sidebar__heading">Shared</h2>
+              <ul id="list-shared" class="list-nav"></ul>
+              <button id="btn-new-shared" class="btn btn--text" type="button">
+                New shared list
+              </button>
+            </div>
+            <div class="sidebar__group">
+              <h2 class="sidebar__heading">My lists</h2>
+              <ul id="list-personal" class="list-nav"></ul>
+              <button id="btn-new-personal" class="btn btn--text" type="button">
+                New personal list
+              </button>
+            </div>
+          </aside>
+
+          <main class="main" aria-live="polite">
+            <header class="main__header">
+              <div class="main__title-row">
+                <h2 id="active-list-name" class="main__title"></h2>
+                <span id="default-badge" class="badge" hidden
+                  >Default for everyone</span
+                >
+              </div>
+              <div class="main__actions">
+                <button id="btn-rename" class="btn btn--ghost" type="button">
+                  Rename
+                </button>
+                <button
+                  id="btn-set-default"
+                  class="btn btn--ghost"
+                  type="button"
+                  hidden
+                >
+                  Set as default
+                </button>
+                <button
+                  id="btn-delete-list"
+                  class="btn btn--danger"
+                  type="button"
+                >
+                  Delete list
+                </button>
+              </div>
+            </header>
+
+            <form id="form-add-item" class="add-form">
+              <label class="visually-hidden" for="input-item">New item</label>
+              <input
+                id="input-item"
+                class="add-form__input"
+                type="text"
+                name="item"
+                autocomplete="off"
+                placeholder="Add an item"
+                required
+              />
+              <button class="btn btn--primary" type="submit">Add</button>
+            </form>
+
+            <ul id="items" class="items"></ul>
+            <p id="items-empty" class="items-empty" hidden>No items yet.</p>
+          </main>
+        </div>
+
+        <p id="app-message" class="message message--error shell__message" hidden></p>
+      </section>
+    </div>
+
+    <script type="module" src="grocery.js"></script>
+  </body>
+</html>
