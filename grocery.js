@@ -139,11 +139,22 @@ function sortLists(lists) {
   return [...lists].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+async function readDocOrMissing(ref) {
+  try {
+    return await getDoc(ref);
+  } catch (error) {
+    if (error?.code === "permission-denied") {
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function ensureBootstrap() {
   const bootstrapRef = doc(db, "lists", BOOTSTRAP_LIST_ID);
-  const bootstrapSnap = await getDoc(bootstrapRef);
+  const bootstrapSnap = await readDocOrMissing(bootstrapRef);
 
-  if (!bootstrapSnap.exists()) {
+  if (!bootstrapSnap?.exists()) {
     await setDoc(bootstrapRef, {
       name: "Grocery",
       scope: "shared",
@@ -160,9 +171,9 @@ async function ensureBootstrap() {
 
   let defaultIsValid = false;
   if (defaultId) {
-    const defaultListSnap = await getDoc(doc(db, "lists", defaultId));
+    const defaultListSnap = await readDocOrMissing(doc(db, "lists", defaultId));
     defaultIsValid =
-      defaultListSnap.exists() &&
+      !!defaultListSnap?.exists() &&
       defaultListSnap.data().scope === "shared";
   }
 

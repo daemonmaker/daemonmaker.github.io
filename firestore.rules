@@ -27,7 +27,12 @@ service cloud.firestore {
     }
 
     match /lists/{listId} {
-      allow read: if isSignedIn()
+      allow get: if isSignedIn()
+        && (!exists(/databases/$(database)/documents/lists/$(listId))
+          || resource.data.scope == 'shared'
+          || resource.data.ownerUid == request.auth.uid);
+
+      allow list: if isSignedIn()
         && (resource.data.scope == 'shared'
           || resource.data.ownerUid == request.auth.uid);
 
