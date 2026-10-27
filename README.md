@@ -95,11 +95,18 @@ private to the owner. Only shared lists can be set as the global default.
    → Authentication → Sign-in method → Google → Web SDK configuration. Paste
    it into [grocery-config.js](grocery-config.js) as `GOOGLE_OAUTH_CLIENT_ID`
    (public value, safe to commit). In [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-   → Credentials → that Web client:
-   - **Authorized JavaScript origins:** `https://daemonmaker.github.io`,
+   → **Credentials** → OAuth 2.0 Client IDs → open the client whose ID matches
+   `GOOGLE_OAUTH_CLIENT_ID` in [grocery-config.js](grocery-config.js) (same
+   project: **daemonmaker-grocery**, project number `75529110090`). This is
+   **not** the same field as Firebase “Authorized domains”.
+   - **Authorized JavaScript origins** (no path): `https://daemonmaker.github.io`,
      `http://localhost`
-   - **Authorized redirect URIs:** `https://daemonmaker.github.io/grocery.html`,
-     `http://localhost:8000/grocery.html` (adjust port if needed)
+   - **Authorized redirect URIs** (must match [grocery-config.js](grocery-config.js)
+     `GOOGLE_OAUTH_REDIRECT_URI` exactly): `https://daemonmaker.github.io/` and
+     `http://localhost:8000/` for local preview
+   - If you still see **redirect_uri_mismatch**, click Google’s “error details”
+     and compare its `redirect_uri=` value character-for-character with the
+     redirect URI list above (trailing slash matters).
 
 Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
 

@@ -6,7 +6,10 @@ import {
   signInWithCredential,
   signOut,
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { GOOGLE_OAUTH_CLIENT_ID } from "./grocery-config.js";
+import {
+  GOOGLE_OAUTH_CLIENT_ID,
+  GOOGLE_OAUTH_REDIRECT_URI,
+} from "./grocery-config.js";
 import {
   getFirestore,
   collection,
@@ -511,54 +514,150 @@ async function removeItem(itemId) {
   await deleteDoc(doc(db, "lists", active.id, "items", itemId));
 }
 
+const PKCE_VERIFIER_KEY = "google_oauth_pkce_verifier";
+const PKCE_REDIRECT_KEY = "google_oauth_redirect_uri";
+
 function getOAuthRedirectUri() {
-  let path = window.location.pathname;
-  if (path.length > 1 && path.endsWith("/")) {
-    path = path.slice(0, -1);
+  if (window.location.hostname === "localhost") {
+    return `${window.location.origin}/`;
   }
-  return `${window.location.origin}${path}`;
+  if (GOOGLE_OAUTH_REDIRECT_URI) {
+    return GOOGLE_OAUTH_REDIRECT_URI;
+  }
+  return `${window.location.origin}/`;
 }
 
-function startGoogleOAuthRedirect() {
+function base64UrlEncode(bytes) {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/u, "");
+}
+
+function randomPkceVerifier() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes);
+}
+
+async function pkceChallengeFromVerifier(verifier) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier),
+  );
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+async function startGoogleOAuthRedirect() {
   setLoginError("");
   setLoginBusy(true, "Redirecting to Google…");
+
+  const redirectUri = getOAuthRedirectUri();
+  const verifier = randomPkceVerifier();
+  const challenge = await pkceChallengeFromVerifier(verifier);
+  sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+  sessionStorage.setItem(PKCE_REDIRECT_KEY, redirectUri);
+
   const params = new URLSearchParams({
     client_id: GOOGLE_OAUTH_CLIENT_ID,
-    redirect_uri: getOAuthRedirectUri(),
-    response_type: "token",
+    redirect_uri: redirectUri,
+    response_type: "code",
     scope: "openid profile email",
     prompt: "select_account",
-    include_granted_scopes: "true",
+    code_challenge: challenge,
+    code_challenge_method: "S256",
   });
   window.location.assign(
     `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
   );
 }
 
-async function completeGoogleOAuthFromHash() {
+async function signInWithGoogleTokens(idToken, accessToken) {
+  const credential = GoogleAuthProvider.credential(
+    idToken || null,
+    accessToken || null,
+  );
+  await signInWithCredential(auth, credential);
+}
+
+async function completeGoogleOAuthFromReturn() {
+  const query = new URLSearchParams(window.location.search);
+  const queryError = query.get("error");
+  if (queryError) {
+    history.replaceState(null, "", window.location.pathname);
+    setLoginError(query.get("error_description") || queryError);
+    return true;
+  }
+
+  const code = query.get("code");
+  if (code) {
+    history.replaceState(null, "", window.location.pathname);
+
+    const verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
+    const redirectUri =
+      sessionStorage.getItem(PKCE_REDIRECT_KEY) || getOAuthRedirectUri();
+    sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+    sessionStorage.removeItem(PKCE_REDIRECT_KEY);
+
+    if (!verifier) {
+      setLoginError(
+        "Sign-in session expired. Close this tab and try again from the grocery page.",
+      );
+      return true;
+    }
+
+    setLoginBusy(true, "Signing in…");
+    try {
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: GOOGLE_OAUTH_CLIENT_ID,
+          code,
+          code_verifier: verifier,
+          redirect_uri: redirectUri,
+          grant_type: "authorization_code",
+        }),
+      });
+      const tokenJson = await tokenRes.json();
+      if (!tokenRes.ok) {
+        throw new Error(
+          tokenJson.error_description ||
+            tokenJson.error ||
+            "Token exchange failed.",
+        );
+      }
+      await signInWithGoogleTokens(tokenJson.id_token, tokenJson.access_token);
+    } catch (error) {
+      setLoginBusy(false);
+      setLoginError(error.message || "Sign-in failed.");
+    }
+    return true;
+  }
+
   const hash = window.location.hash;
   if (!hash || !hash.includes("access_token=")) {
     return false;
   }
 
-  const params = new URLSearchParams(hash.slice(1));
-  history.replaceState(null, "", getOAuthRedirectUri());
+  const hashParams = new URLSearchParams(hash.slice(1));
+  history.replaceState(null, "", window.location.pathname);
 
-  const oauthError = params.get("error");
+  const oauthError = hashParams.get("error");
   if (oauthError) {
-    setLoginError(params.get("error_description") || oauthError);
+    setLoginError(hashParams.get("error_description") || oauthError);
     return true;
   }
 
-  const accessToken = params.get("access_token");
+  const accessToken = hashParams.get("access_token");
   if (!accessToken) {
     return false;
   }
 
   setLoginBusy(true, "Signing in…");
   try {
-    const credential = GoogleAuthProvider.credential(null, accessToken);
-    await signInWithCredential(auth, credential);
+    await signInWithGoogleTokens(null, accessToken);
   } catch (error) {
     setLoginBusy(false);
     setLoginError(error.message || "Sign-in failed.");
@@ -573,7 +672,7 @@ function showOAuthRedirectHint() {
   }
   const redirectUri = getOAuthRedirectUri();
   hint.hidden = false;
-  hint.textContent = `If Google shows redirect_uri_mismatch, add this exact URI under Google Cloud → Credentials → your Web client → Authorized redirect URIs: ${redirectUri}`;
+  hint.textContent = `Google Cloud → Credentials → client ${GOOGLE_OAUTH_CLIENT_ID.slice(0, 20)}… → Authorized redirect URIs must include exactly: ${redirectUri}`;
 }
 
 function initGoogleSignIn() {
@@ -671,7 +770,7 @@ async function initAuth() {
   });
 
   initGoogleSignIn();
-  await completeGoogleOAuthFromHash();
+  await completeGoogleOAuthFromReturn();
 }
 
 initAuth();
