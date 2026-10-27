@@ -549,13 +549,14 @@ function startGoogleOAuthRedirect() {
   );
 }
 
-function idTokenNonce(idToken) {
+function decodeJwtPayload(idToken) {
   const payload = idToken.split(".")[1];
   if (!payload) {
     return null;
   }
-  const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-  return json.nonce || null;
+  const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  return JSON.parse(atob(padded));
 }
 
 async function completeGoogleOAuthReturn() {
@@ -564,7 +565,15 @@ async function completeGoogleOAuthReturn() {
   const oauthError = hash.get("error") || query.get("error");
   const idToken = hash.get("id_token");
   const accessToken = hash.get("access_token");
+  const hadPendingSignIn = Boolean(localStorage.getItem(OAUTH_NONCE_KEY));
+
   if (!oauthError && !idToken && !accessToken) {
+    if (hadPendingSignIn) {
+      localStorage.removeItem(OAUTH_NONCE_KEY);
+      setLoginError(
+        "Google sent you back without a sign-in token. Check Authorized redirect URIs includes https://daemonmaker.github.io/grocery.html",
+      );
+    }
     return;
   }
 
@@ -573,18 +582,28 @@ async function completeGoogleOAuthReturn() {
   localStorage.removeItem(OAUTH_NONCE_KEY);
 
   if (oauthError) {
-    setLoginError(hash.get("error_description") || query.get("error_description") || oauthError);
+    setLoginError(
+      hash.get("error_description") ||
+        query.get("error_description") ||
+        oauthError,
+    );
     return;
   }
 
-  if (idToken && expectedNonce && idTokenNonce(idToken) !== expectedNonce) {
-    setLoginError("Sign-in could not be verified. Please try again.");
-    return;
-  }
-
-  setLoginBusy(true, "Signing in…");
   try {
-    const credential = GoogleAuthProvider.credential(idToken, accessToken);
+    if (idToken && expectedNonce) {
+      const nonce = decodeJwtPayload(idToken)?.nonce;
+      if (nonce && nonce !== expectedNonce) {
+        setLoginError("Sign-in could not be verified. Please try again.");
+        return;
+      }
+    }
+
+    setLoginBusy(true, "Signing in…");
+    const credential = GoogleAuthProvider.credential(
+      idToken || null,
+      accessToken || null,
+    );
     await signInWithCredential(auth, credential);
   } catch (error) {
     setLoginBusy(false);
