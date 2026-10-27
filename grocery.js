@@ -11,7 +11,24 @@ import {
   GOOGLE_OAUTH_CLIENT_ID,
   GOOGLE_OAUTH_REDIRECT_URI,
 } from "./grocery-config.js";
-import { isChecked, sortItems } from "./grocery-items.mjs";
+import {
+  isChecked,
+  sortItems,
+  itemNameCommitAction,
+  itemNameCommitUIEffect,
+  itemNameDisplayAfterCommit,
+  shouldCommitItemNameOnOutsidePointerDown,
+  itemNameForDisplay,
+  reconcilePendingItemRenames,
+} from "./grocery-items.mjs";
+import { matchMealItems, itemsToAdd } from "./grocery-meals.mjs";
+import {
+  mealEditorDeleteAction,
+  draftMealPersistResult,
+  mealEditorNameBlurAction,
+  buildMealCreateFields,
+  mealIngredientAddAttempt,
+} from "./grocery-meal-editor.mjs";
 import {
   getFirestore,
   collection,
@@ -27,6 +44,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  writeBatch,
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -63,6 +81,20 @@ const btnSetDefault = document.getElementById("btn-set-default");
 const formAddItem = document.getElementById("form-add-item");
 const inputItem = document.getElementById("input-item");
 const itemSortEl = document.getElementById("item-sort");
+const listMealsSharedEl = document.getElementById("list-meals-shared");
+const listMealsPersonalEl = document.getElementById("list-meals-personal");
+const mealDialog = document.getElementById("meal-dialog");
+const mealDialogTitle = document.getElementById("meal-dialog-title");
+const mealDialogItemsEl = document.getElementById("meal-dialog-items");
+const mealDialogClose = document.getElementById("meal-dialog-close");
+const mealEditorDialog = document.getElementById("meal-editor-dialog");
+const mealEditorName = document.getElementById("meal-editor-name");
+const formMealIngredient = document.getElementById("form-meal-ingredient");
+const inputMealIngredient = document.getElementById("input-meal-ingredient");
+const mealEditorItemsEl = document.getElementById("meal-editor-items");
+const btnDeleteMeal = document.getElementById("btn-delete-meal");
+const mealEditorClose = document.getElementById("meal-editor-close");
+const mealEditorMessage = document.getElementById("meal-editor-message");
 
 const state = {
   user: null,
@@ -70,13 +102,24 @@ const state = {
   activeListId: null,
   sharedLists: [],
   personalLists: [],
+  sharedMeals: [],
+  personalMeals: [],
   items: [],
+  editingItemId: null,
+  pendingItemRenames: {},
   itemSort: "name",
   ready: false,
+  mealDialogMealId: null,
+  mealDialogMealItems: [],
+  editingMealId: null,
+  draftMealScope: null,
+  mealEditorItems: [],
 };
 
 const unsubscribers = [];
+const itemRenameSkipBlur = new Set();
 let itemsUnsub = null;
+let mealEditorItemsUnsub = null;
 
 function showLogin() {
   viewLogin.hidden = false;
@@ -119,10 +162,37 @@ function setAppMessage(message) {
   appMessage.textContent = message;
 }
 
+function setMealEditorMessage(message) {
+  if (!mealEditorMessage) {
+    return;
+  }
+  if (!message) {
+    mealEditorMessage.hidden = true;
+    mealEditorMessage.textContent = "";
+    return;
+  }
+  mealEditorMessage.hidden = false;
+  mealEditorMessage.textContent = message;
+}
+
+function focusMealEditorField(focusField) {
+  if (focusField === "meal_name") {
+    mealEditorName.focus();
+    return;
+  }
+  if (focusField === "ingredient") {
+    inputMealIngredient.focus();
+  }
+}
+
 function cleanupSubscriptions() {
   if (itemsUnsub) {
     itemsUnsub();
     itemsUnsub = null;
+  }
+  if (mealEditorItemsUnsub) {
+    mealEditorItemsUnsub();
+    mealEditorItemsUnsub = null;
   }
   while (unsubscribers.length) {
     const unsub = unsubscribers.pop();
@@ -138,8 +208,20 @@ function getListById(id) {
   );
 }
 
+function getMealById(id) {
+  return (
+    state.sharedMeals.find((meal) => meal.id === id) ||
+    state.personalMeals.find((meal) => meal.id === id) ||
+    null
+  );
+}
+
 function sortLists(lists) {
   return [...lists].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function sortMeals(meals) {
+  return sortLists(meals);
 }
 
 async function readDocOrMissing(ref) {
@@ -238,39 +320,366 @@ function renderListNav(container, lists, emptyLabel) {
   }
 }
 
-function renderItems() {
-  itemsEl.replaceChildren();
-  itemsEmptyEl.hidden = state.items.length > 0;
+function renderMealNav(container, meals, emptyLabel) {
+  container.replaceChildren();
+  if (!meals.length) {
+    const empty = document.createElement("li");
+    empty.className = "list-nav__item";
+    empty.textContent = emptyLabel;
+    empty.style.color = "var(--text-muted)";
+    empty.style.fontSize = "0.9rem";
+    empty.style.padding = "0.45rem 0.5rem";
+    container.appendChild(empty);
+    return;
+  }
 
-  for (const item of sortItems(state.items, state.itemSort)) {
+  for (const meal of meals) {
     const li = document.createElement("li");
-    li.className = "items__row";
+    li.className = "list-nav__item list-nav__item--meal";
 
-    const checked = isChecked(item);
+    const row = document.createElement("div");
+    row.className = "list-nav__meal-row";
 
-    const check = document.createElement("input");
-    check.type = "checkbox";
-    check.className = "items__check";
-    check.checked = checked;
-    check.setAttribute("aria-label", item.name);
-    check.addEventListener("change", () => toggleItem(item.id));
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "list-nav__button list-nav__button--meal";
+    addBtn.textContent = meal.name;
+    addBtn.addEventListener("click", () => {
+      addMealToList(meal.id);
+    });
 
-    const name = document.createElement("p");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn btn--text list-nav__edit-meal";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openMealEditor(meal.id);
+    });
+
+    row.appendChild(addBtn);
+    row.appendChild(editBtn);
+    li.appendChild(row);
+    container.appendChild(li);
+  }
+}
+
+function renderMealDialog() {
+  if (!state.mealDialogMealId || !mealDialog.open) {
+    return;
+  }
+
+  const rows = matchMealItems(state.mealDialogMealItems, state.items);
+  const existingByKey = new Map();
+  for (const child of mealDialogItemsEl.children) {
+    if (child.dataset.mealRowKey) {
+      existingByKey.set(child.dataset.mealRowKey, child);
+    }
+  }
+
+  const nextKeys = new Set();
+  for (const row of rows) {
+    const key = row.name;
+    nextKeys.add(key);
+    let li = existingByKey.get(key);
+    const checked = row.onList && row.checked;
+    const disabled = !row.onList;
+
+    if (!li) {
+      li = document.createElement("li");
+      li.className = "items__row";
+      li.dataset.mealRowKey = key;
+
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.className = "items__check";
+      check.dataset.mealRowKey = key;
+
+      const name = document.createElement("p");
+      name.className = "items__name";
+      name.dataset.mealRowKey = key;
+
+      li.appendChild(check);
+      li.appendChild(name);
+      mealDialogItemsEl.appendChild(li);
+
+      check.addEventListener("change", () => {
+        const match = matchMealItems(state.mealDialogMealItems, state.items).find(
+          (entry) => entry.name === key,
+        );
+        if (match?.groceryItem?.id) {
+          toggleItem(match.groceryItem.id);
+        }
+      });
+    }
+
+    const check = li.querySelector('input[type="checkbox"]');
+    const name = li.querySelector(".items__name");
+    if (document.activeElement !== check) {
+      check.checked = checked;
+      check.disabled = disabled;
+      check.setAttribute("aria-label", row.name);
+    }
+    name.textContent = row.name;
     name.className = checked
       ? "items__name items__name--done"
       : "items__name";
+    if (!row.onList) {
+      name.classList.add("items__name--pending");
+    } else {
+      name.classList.remove("items__name--pending");
+    }
+  }
+
+  for (const [key, li] of existingByKey) {
+    if (!nextKeys.has(key)) {
+      li.remove();
+    }
+  }
+}
+
+function renderMealEditorItems() {
+  mealEditorItemsEl.replaceChildren();
+  for (const item of sortItems(state.mealEditorItems, "name")) {
+    const li = document.createElement("li");
+    li.className = "items__row";
+
+    const name = document.createElement("p");
+    name.className = "items__name";
     name.textContent = item.name;
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "btn btn--ghost";
     removeBtn.textContent = "Remove";
-    removeBtn.addEventListener("click", () => removeItem(item.id));
+    removeBtn.addEventListener("click", () => removeMealIngredient(item.id));
 
-    li.appendChild(check);
     li.appendChild(name);
     li.appendChild(removeBtn);
-    itemsEl.appendChild(li);
+    mealEditorItemsEl.appendChild(li);
+  }
+}
+
+function itemNameButtonClass(checked) {
+  return checked ? "items__name items__name--done" : "items__name";
+}
+
+function itemNameInputClass(checked) {
+  return checked
+    ? "items__name-input items__name-input--done"
+    : "items__name-input";
+}
+
+function startItemNameEdit(itemId) {
+  state.editingItemId = itemId;
+  renderItems();
+  const input = itemsEl.querySelector(`input.items__name-input[data-item-id="${itemId}"]`);
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+function cancelItemNameEdit(itemId) {
+  itemRenameSkipBlur.add(itemId);
+  state.editingItemId = null;
+  renderItems();
+}
+
+async function commitItemNameEdit(itemId) {
+  if (state.editingItemId !== itemId) {
+    return;
+  }
+  const item = state.items.find((entry) => entry.id === itemId);
+  if (!item) {
+    state.editingItemId = null;
+    renderItems();
+    return;
+  }
+
+  const input = itemsEl.querySelector(
+    `input.items__name-input[data-item-id="${itemId}"]`,
+  );
+  if (!input) {
+    state.editingItemId = null;
+    renderItems();
+    return;
+  }
+
+  const action = itemNameCommitAction({
+    nameInput: input.value,
+    existingName: item.name,
+  });
+  const effect = itemNameCommitUIEffect(action);
+  const previousName = item.name;
+
+  state.editingItemId = null;
+  item.name = itemNameDisplayAfterCommit(action, previousName);
+  setAppMessage(effect.userMessage ?? "");
+  renderItems();
+
+  if (!effect.firestoreName) {
+    return;
+  }
+
+  state.pendingItemRenames[itemId] = effect.firestoreName;
+  renderItems();
+
+  const active = getListById(state.activeListId);
+  if (!active) {
+    delete state.pendingItemRenames[itemId];
+    item.name = previousName;
+    renderItems();
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, "lists", active.id, "items", itemId), {
+      name: effect.firestoreName,
+    });
+  } catch (error) {
+    delete state.pendingItemRenames[itemId];
+    item.name = previousName;
+    setAppMessage(error.message || "Could not rename item.");
+    renderItems();
+  }
+}
+
+function bindItemNameInput(input, itemId) {
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitItemNameEdit(itemId);
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelItemNameEdit(itemId);
+    }
+  });
+  input.addEventListener("change", () => {
+    commitItemNameEdit(itemId);
+  });
+  input.addEventListener("blur", () => {
+    if (itemRenameSkipBlur.has(itemId)) {
+      itemRenameSkipBlur.delete(itemId);
+      return;
+    }
+    commitItemNameEdit(itemId);
+  });
+}
+
+function ensureItemRowControls(li, item) {
+  let check = li.querySelector(".items__check");
+  if (!check) {
+    check = document.createElement("input");
+    check.type = "checkbox";
+    check.className = "items__check";
+    check.addEventListener("change", () => toggleItem(item.id));
+    li.appendChild(check);
+  }
+
+  let removeBtn = li.querySelector(".items__remove");
+  if (!removeBtn) {
+    removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn--ghost items__remove";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", () => removeItem(item.id));
+    li.appendChild(removeBtn);
+  }
+}
+
+function renderItems() {
+  itemsEmptyEl.hidden = state.items.length > 0;
+
+  const existingById = new Map();
+  for (const child of itemsEl.children) {
+    if (child.dataset.itemId) {
+      existingById.set(child.dataset.itemId, child);
+    }
+  }
+
+  const sorted = sortItems(state.items, state.itemSort);
+  const nextIds = new Set();
+
+  for (const item of sorted) {
+    nextIds.add(item.id);
+    const checked = isChecked(item);
+    const isEditing = state.editingItemId === item.id;
+    const displayName = itemNameForDisplay(
+      item.name,
+      state.pendingItemRenames[item.id],
+    );
+
+    let li = existingById.get(item.id);
+    if (!li) {
+      li = document.createElement("li");
+      li.className = "items__row";
+      li.dataset.itemId = item.id;
+      itemsEl.appendChild(li);
+    }
+
+    ensureItemRowControls(li, item);
+
+    const check = li.querySelector(".items__check");
+    if (document.activeElement !== check) {
+      check.checked = checked;
+      check.setAttribute("aria-label", displayName);
+    }
+
+    let nameBtn = li.querySelector("button.items__name");
+    let nameInput = li.querySelector("input.items__name-input");
+
+    if (isEditing) {
+      if (nameBtn) {
+        nameBtn.remove();
+        nameBtn = null;
+      }
+      if (!nameInput) {
+        nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.className = itemNameInputClass(checked);
+        nameInput.dataset.itemId = item.id;
+        nameInput.setAttribute("aria-label", "Item name");
+        nameInput.value = displayName;
+        bindItemNameInput(nameInput, item.id);
+        const removeBtn = li.querySelector(".items__remove");
+        li.insertBefore(nameInput, removeBtn);
+      } else if (document.activeElement !== nameInput) {
+        nameInput.className = itemNameInputClass(checked);
+      } else {
+        nameInput.className = itemNameInputClass(checked);
+      }
+    } else {
+      if (nameInput) {
+        nameInput.remove();
+        nameInput = null;
+      }
+      if (!nameBtn) {
+        nameBtn = document.createElement("button");
+        nameBtn.type = "button";
+        nameBtn.addEventListener("click", () => startItemNameEdit(item.id));
+        const removeBtn = li.querySelector(".items__remove");
+        li.insertBefore(nameBtn, removeBtn);
+      }
+      nameBtn.className = itemNameButtonClass(checked);
+      nameBtn.textContent = displayName;
+    }
+  }
+
+  for (const [itemId, li] of existingById) {
+    if (!nextIds.has(itemId)) {
+      li.remove();
+    }
+  }
+
+  if (!state.editingItemId) {
+    for (const item of sorted) {
+      const li = itemsEl.querySelector(`li[data-item-id="${item.id}"]`);
+      if (li) {
+        itemsEl.appendChild(li);
+      }
+    }
   }
 }
 
@@ -305,8 +714,19 @@ function renderToolbar() {
 function renderAll() {
   renderListNav(listSharedEl, state.sharedLists, "No shared lists yet.");
   renderListNav(listPersonalEl, state.personalLists, "No personal lists yet.");
+  renderMealNav(
+    listMealsSharedEl,
+    state.sharedMeals,
+    "No shared meals yet.",
+  );
+  renderMealNav(
+    listMealsPersonalEl,
+    state.personalMeals,
+    "No personal meals yet.",
+  );
   renderToolbar();
   renderItems();
+  renderMealDialog();
 }
 
 function subscribeConfig() {
@@ -353,6 +773,60 @@ function subscribeLists(uid) {
   unsubscribers.push(unsubShared, unsubPersonal);
 }
 
+function subscribeMeals(uid) {
+  const sharedQuery = query(
+    collection(db, "meals"),
+    where("scope", "==", "shared"),
+  );
+  const personalQuery = query(
+    collection(db, "meals"),
+    where("scope", "==", "personal"),
+    where("ownerUid", "==", uid),
+  );
+
+  const unsubShared = onSnapshot(sharedQuery, (snap) => {
+    state.sharedMeals = sortMeals(
+      snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
+    );
+    renderAll();
+  });
+
+  const unsubPersonal = onSnapshot(personalQuery, (snap) => {
+    state.personalMeals = sortMeals(
+      snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
+    );
+    renderAll();
+  });
+
+  unsubscribers.push(unsubShared, unsubPersonal);
+}
+
+function subscribeMealEditorItems(mealId) {
+  if (mealEditorItemsUnsub) {
+    mealEditorItemsUnsub();
+    mealEditorItemsUnsub = null;
+  }
+
+  if (!mealId) {
+    state.mealEditorItems = [];
+    renderMealEditorItems();
+    return;
+  }
+
+  const itemsQuery = query(
+    collection(db, "meals", mealId, "items"),
+    orderBy("createdAt", "asc"),
+  );
+
+  mealEditorItemsUnsub = onSnapshot(itemsQuery, (snap) => {
+    state.mealEditorItems = snap.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    }));
+    renderMealEditorItems();
+  });
+}
+
 function ensureActiveList() {
   const activeStillVisible = getListById(state.activeListId);
   if (activeStillVisible) {
@@ -380,9 +854,14 @@ function subscribeItems() {
 
   if (!state.activeListId) {
     state.items = [];
+    state.editingItemId = null;
+    state.pendingItemRenames = {};
     renderItems();
     return;
   }
+
+  state.editingItemId = null;
+  state.pendingItemRenames = {};
 
   const itemsQuery = query(
     collection(db, "lists", state.activeListId, "items"),
@@ -394,8 +873,264 @@ function subscribeItems() {
       id: docSnap.id,
       ...docSnap.data(),
     }));
+    state.pendingItemRenames = reconcilePendingItemRenames(
+      state.pendingItemRenames,
+      state.items,
+    );
     renderItems();
+    renderMealDialog();
   });
+}
+
+function createMeal(scope) {
+  state.draftMealScope = scope;
+  state.editingMealId = null;
+  if (mealEditorItemsUnsub) {
+    mealEditorItemsUnsub();
+    mealEditorItemsUnsub = null;
+  }
+  state.mealEditorItems = [];
+  renderMealEditorItems();
+  mealEditorName.value = "";
+  setMealEditorMessage("");
+  setAppMessage("");
+  mealEditorDialog.showModal();
+  mealEditorName.focus();
+}
+
+function openMealEditor(mealId) {
+  const meal = getMealById(mealId);
+  if (!meal) {
+    return;
+  }
+  state.draftMealScope = null;
+  state.editingMealId = mealId;
+  mealEditorName.value = meal.name;
+  setMealEditorMessage("");
+  subscribeMealEditorItems(mealId);
+  mealEditorDialog.showModal();
+}
+
+function closeMealEditor() {
+  setMealEditorMessage("");
+  state.editingMealId = null;
+  state.draftMealScope = null;
+  if (mealEditorItemsUnsub) {
+    mealEditorItemsUnsub();
+    mealEditorItemsUnsub = null;
+  }
+  state.mealEditorItems = [];
+  mealEditorDialog.close();
+}
+
+async function persistDraftMeal() {
+  const result = draftMealPersistResult({
+    editingMealId: state.editingMealId,
+    draftMealScope: state.draftMealScope,
+    nameInput: mealEditorName.value,
+  });
+  if (result.status === "already_saved") {
+    return result.mealId;
+  }
+  if (result.status === "skipped") {
+    return null;
+  }
+  if (result.status === "blocked") {
+    setMealEditorMessage(result.userMessage);
+    mealEditorName.focus();
+    return null;
+  }
+  setAppMessage("");
+  try {
+    const payload = {
+      ...buildMealCreateFields({
+        name: result.name,
+        scope: result.scope,
+        ownerUid: state.user.uid,
+      }),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    const ref = await addDoc(collection(db, "meals"), payload);
+    state.editingMealId = ref.id;
+    state.draftMealScope = null;
+    subscribeMealEditorItems(ref.id);
+    return ref.id;
+  } catch (error) {
+    setMealEditorMessage(error.message || "Could not create meal.");
+    return null;
+  }
+}
+
+async function saveMealEditorName() {
+  const meal = state.editingMealId
+    ? getMealById(state.editingMealId)
+    : null;
+  const action = mealEditorNameBlurAction({
+    editingMealId: state.editingMealId,
+    draftMealScope: state.draftMealScope,
+    nameInput: mealEditorName.value,
+    existingMealName: meal?.name ?? null,
+  });
+
+  if (action.type === "noop") {
+    return;
+  }
+  if (action.type === "persist_draft") {
+    await persistDraftMeal();
+    return;
+  }
+  if (action.type === "reject_empty") {
+    setMealEditorMessage("Meal name cannot be empty.");
+    mealEditorName.value = action.restoreName;
+    return;
+  }
+
+  const mealId = state.editingMealId;
+  if (!mealId || !meal) {
+    return;
+  }
+  setAppMessage("");
+  try {
+    await updateDoc(doc(db, "meals", mealId), {
+      name: action.name,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    setAppMessage(error.message || "Could not rename meal.");
+    mealEditorName.value = meal.name;
+  }
+}
+
+async function addMealIngredient(event) {
+  event.preventDefault();
+  const attempt = mealIngredientAddAttempt({
+    editingMealId: state.editingMealId,
+    draftMealScope: state.draftMealScope,
+    mealNameInput: mealEditorName.value,
+    ingredientInput: inputMealIngredient.value,
+    mealEditorItems: state.mealEditorItems,
+  });
+  if (!attempt.ok) {
+    setMealEditorMessage(attempt.message);
+    focusMealEditorField(attempt.focusField);
+    return;
+  }
+
+  let mealId = state.editingMealId;
+  if (attempt.mustPersistDraft) {
+    mealId = await persistDraftMeal();
+    if (!mealId) {
+      return;
+    }
+  }
+
+  setMealEditorMessage("");
+  try {
+    await addDoc(collection(db, "meals", mealId, "items"), {
+      name: attempt.ingredientName,
+      createdAt: serverTimestamp(),
+    });
+    inputMealIngredient.value = "";
+    inputMealIngredient.focus();
+  } catch (error) {
+    setMealEditorMessage(error.message || "Could not add ingredient.");
+  }
+}
+
+async function removeMealIngredient(itemId) {
+  const mealId = state.editingMealId;
+  if (!mealId) {
+    return;
+  }
+  setAppMessage("");
+  try {
+    await deleteDoc(doc(db, "meals", mealId, "items", itemId));
+  } catch (error) {
+    setAppMessage(error.message || "Could not remove ingredient.");
+  }
+}
+
+async function deleteEditingMeal() {
+  const deleteAction = mealEditorDeleteAction(state.editingMealId);
+  if (deleteAction.type === "close_draft") {
+    closeMealEditor();
+    return;
+  }
+  const meal = getMealById(state.editingMealId);
+  if (!meal) {
+    return;
+  }
+  const confirmed = window.confirm(
+    `Delete "${meal.name}" and all of its ingredients? This cannot be undone.`,
+  );
+  if (!confirmed) {
+    return;
+  }
+  setAppMessage("");
+  try {
+    const itemsSnap = await getDocs(
+      collection(db, "meals", meal.id, "items"),
+    );
+    await Promise.all(itemsSnap.docs.map((itemDoc) => deleteDoc(itemDoc.ref)));
+    await deleteDoc(doc(db, "meals", meal.id));
+    closeMealEditor();
+  } catch (error) {
+    setAppMessage(error.message || "Could not delete meal.");
+  }
+}
+
+async function addMealToList(mealId) {
+  const active = getListById(state.activeListId);
+  if (!active) {
+    setAppMessage("Select a grocery list first.");
+    return;
+  }
+  const meal = getMealById(mealId);
+  if (!meal) {
+    return;
+  }
+
+  setAppMessage("");
+  try {
+    const mealItemsSnap = await getDocs(
+      collection(db, "meals", mealId, "items"),
+    );
+    const mealItems = mealItemsSnap.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    }));
+
+    const toAdd = itemsToAdd(mealItems, state.items);
+    if (toAdd.length) {
+      const batch = writeBatch(db);
+      const itemsCol = collection(db, "lists", active.id, "items");
+      for (const name of toAdd) {
+        batch.set(doc(itemsCol), {
+          name,
+          checked: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+
+    state.mealDialogMealId = mealId;
+    state.mealDialogMealItems = mealItems;
+    mealDialogTitle.textContent = meal.name;
+    mealDialogItemsEl.replaceChildren();
+    mealDialog.showModal();
+    renderMealDialog();
+  } catch (error) {
+    setAppMessage(error.message || "Could not add meal to list.");
+  }
+}
+
+function closeMealDialog() {
+  state.mealDialogMealId = null;
+  state.mealDialogMealItems = [];
+  mealDialogItemsEl.replaceChildren();
+  mealDialog.close();
 }
 
 async function promptListName(title, defaultValue = "") {
@@ -666,6 +1401,7 @@ async function startSession(user) {
     await ensureBootstrap();
     subscribeConfig();
     subscribeLists(user.uid);
+    subscribeMeals(user.uid);
 
     const configSnap = await getDoc(doc(db, "config", "app"));
     state.defaultListId = configSnap.exists()
@@ -681,13 +1417,26 @@ async function startSession(user) {
 }
 
 function endSession() {
+  if (mealDialog.open) {
+    closeMealDialog();
+  }
+  if (mealEditorDialog.open) {
+    closeMealEditor();
+  }
   cleanupSubscriptions();
   state.user = null;
   state.defaultListId = null;
   state.activeListId = null;
   state.sharedLists = [];
   state.personalLists = [];
+  state.sharedMeals = [];
+  state.personalMeals = [];
   state.items = [];
+  state.mealDialogMealId = null;
+  state.mealDialogMealItems = [];
+  state.editingMealId = null;
+  state.draftMealScope = null;
+  state.mealEditorItems = [];
   state.ready = false;
   showLogin();
 }
@@ -704,6 +1453,42 @@ document.getElementById("btn-new-personal").addEventListener("click", () => {
   createList("personal");
 });
 
+document.getElementById("btn-new-shared-meal").addEventListener("click", () => {
+  createMeal("shared");
+});
+
+document.getElementById("btn-new-personal-meal").addEventListener("click", () => {
+  createMeal("personal");
+});
+
+mealDialogClose.addEventListener("click", () => {
+  closeMealDialog();
+});
+
+mealDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeMealDialog();
+});
+
+mealEditorClose.addEventListener("click", () => {
+  closeMealEditor();
+});
+
+mealEditorDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeMealEditor();
+});
+
+mealEditorName.addEventListener("change", () => {
+  saveMealEditorName();
+});
+
+formMealIngredient.addEventListener("submit", addMealIngredient);
+
+btnDeleteMeal.addEventListener("click", () => {
+  deleteEditingMeal();
+});
+
 document.getElementById("btn-rename").addEventListener("click", () => {
   renameActiveList();
 });
@@ -717,6 +1502,29 @@ btnSetDefault.addEventListener("click", () => {
 });
 
 formAddItem.addEventListener("submit", addItem);
+
+viewApp.addEventListener("pointerdown", (event) => {
+  if (!state.editingItemId) {
+    return;
+  }
+  const input = itemsEl.querySelector(
+    `input.items__name-input[data-item-id="${state.editingItemId}"]`,
+  );
+  if (!input) {
+    return;
+  }
+  const pointerOnActiveInput =
+    input === event.target || input.contains(event.target);
+  if (
+    !shouldCommitItemNameOnOutsidePointerDown({
+      editingItemId: state.editingItemId,
+      pointerOnActiveInput,
+    })
+  ) {
+    return;
+  }
+  commitItemNameEdit(state.editingItemId);
+});
 
 itemSortEl.addEventListener("change", () => {
   state.itemSort = itemSortEl.value;

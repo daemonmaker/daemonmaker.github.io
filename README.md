@@ -10,7 +10,7 @@ Plain static files. No build step, no generator, no framework.
 - `index.html`
 - `style.css`
 - `assets/headshot.jpg`
-- `grocery.html`, `grocery.css`, `grocery.js`, `grocery-config.js` — unlisted grocery lists (Firebase)
+- `grocery.html`, `grocery.css`, `grocery.js`, `grocery-config.js`, `grocery-items.mjs`, `grocery-meals.mjs`, `grocery-meal-editor.mjs` — unlisted grocery lists and meals (Firebase)
 - `firestore.rules`, `firestore.indexes.json` — rules and index source; publish rules in the Firebase console
 - `__/auth/*`, `__/firebase/init.json` — unused Firebase Auth handler copies, not the sign-in path
 
@@ -80,10 +80,23 @@ Firestore project `daemonmaker-grocery`.
   (name “Grocery”).
 - **`lists/{listId}/items/{itemId}`** — `name`, `createdAt`, `checked`
   (boolean). Legacy items without `checked` display as unchecked. The UI sorts
-  by name or checked state.
+  by name or checked state and supports inline rename (click the item name).
+- **`meals/{mealId}`** — saved meals (not grocery lists): same fields as a list
+  (`name`, `scope`, `ownerUid`, timestamps).
+- **`meals/{mealId}/items/{itemId}`** — ingredient lines: `name`, `createdAt`
+  only. No `checked` field.
 
 Shared lists are visible and editable by any signed-in user. Personal lists are
-private to the owner. Only shared lists can be set as the global default.
+private to the owner. Only shared lists can be set as the global default. Shared
+meals work the same way; personal meals are owner-only.
+
+### Add meal to list
+
+When you add a meal to the active list, ingredients are matched to list items
+by normalized name (trim + lowercase). Missing items are batch-added to the
+list. A confirmation dialog lists each ingredient and lets you toggle `checked`
+on the matching grocery row (duplicate names prefer an unchecked row). Logic
+lives in `grocery-meals.mjs`; meal editing helpers in `grocery-meal-editor.mjs`.
 
 ### Firebase console checklist (one-time)
 
@@ -92,10 +105,11 @@ private to the owner. Only shared lists can be set as the global default.
 3. **Authentication → Settings → Authorized domains** — add `daemonmaker.github.io`
    and `localhost`.
 4. **Firestore → Rules** — copy from [firestore.rules](firestore.rules) and
-   publish after every rules edit. Git does not deploy these rules. Item
-   updates may only change `checked`; new items must include `checked` as a
-   boolean. A `get` of a list that does not exist yet must stay allowed, or the
-   first sign-in cannot create `shared-grocery`.
+   publish after every rules edit (including `meals` collections). Git does not
+   deploy these rules. List item updates may change `checked` or `name`; new list
+   items must include `checked` as a boolean. Meal item documents are
+   `name` + `createdAt` only. A `get` of a list that does not exist yet must
+   stay allowed, or the first sign-in cannot create `shared-grocery`.
 5. **Firestore → Indexes** — if prompted, create the composite index for
    `lists` on `scope` + `ownerUid` (see [firestore.indexes.json](firestore.indexes.json)).
 6. **Authorized redirect URIs** — in [Google Cloud Console](https://console.cloud.google.com/apis/credentials?project=daemonmaker-grocery)
@@ -117,8 +131,8 @@ Local preview: `python3 -m http.server 8000`, then open
 port is part of the redirect URI, so a different port will not match the URI
 registered above.
 
-Item sort/check helpers:
+Item sort/check and meal helpers:
 
 ```bash
-node --test grocery-items.test.mjs
+node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs
 ```

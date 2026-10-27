@@ -13,7 +13,7 @@ Plain files only. No build, no npm, no framework, no bundler.
 
 ## Grocery app
 
-Files: `grocery.html`, `grocery.css`, `grocery.js`, `grocery-config.js`, `firestore.rules`, `firestore.indexes.json`.
+Files: `grocery.html`, `grocery.css`, `grocery.js`, `grocery-config.js`, `grocery-items.mjs`, `grocery-meals.mjs`, `grocery-meal-editor.mjs`, `firestore.rules`, `firestore.indexes.json`.
 
 Firebase project `daemonmaker-grocery`. Firestore region `us-west3`. The web API key in `grocery.js` is public; security is Firestore rules. Never put a Google OAuth client secret in this repo. The web client is confidential, so the authorization-code flow cannot run here.
 
@@ -21,12 +21,18 @@ Firebase project `daemonmaker-grocery`. Firestore region `us-west3`. The web API
 
 - `config/app.defaultListId` — shared list everyone opens after sign-in.
 - `lists/{listId}` — `name`, `scope` (`shared` | `personal`), `ownerUid` (personal only), `createdAt`, `updatedAt`.
-- `lists/{listId}/items/{itemId}` — `name`, `createdAt`, `checked` (boolean). Missing `checked` is treated as unchecked in the UI. Client sort by name or checked state (`grocery-items.mjs`).
+- `lists/{listId}/items/{itemId}` — `name`, `createdAt`, `checked` (boolean). Missing `checked` is treated as unchecked in the UI. Client sort by name or checked state; inline rename uses `itemNameCommitAction` in `grocery-items.mjs`.
 - Bootstrap list id `shared-grocery`, name `Grocery`.
+- `meals/{mealId}` — saved meals, not grocery lists: `name`, `scope` (`shared` | `personal`), `ownerUid` (personal only), `createdAt`, `updatedAt` (same shape as `lists/{listId}`).
+- `meals/{mealId}/items/{itemId}` — ingredient lines only: `name`, `createdAt`. No `checked`; checked state lives on grocery list items when a meal is added to a list.
 
-Any signed-in user can create, rename, delete, and edit shared lists and their items. Personal lists are owner-only. Only a shared list can be the global default. Deleting the default reassigns it or recreates `shared-grocery`.
+Any signed-in user can create, rename, delete, and edit shared lists and their items. Personal lists are owner-only. Only a shared list can be the global default. Deleting the default reassigns it or recreates `shared-grocery`. Shared meals and their ingredients are editable by any signed-in user; personal meals are owner-only.
 
-`firestore.rules` is the rules source, but GitHub Pages does not publish them. Copy the file into the Firebase console and publish it after any rules change (including item `checked` updates). List reads are split into `get` and `list`: a `get` of a missing list must be allowed, or `ensureBootstrap()` fails with `permission-denied` before it can create `shared-grocery`. `readDocOrMissing()` treats that denial as "missing" and then creates the doc. Queries use `list` and must stay constrained to `scope == shared` or `ownerUid == auth.uid`.
+`firestore.rules` is the rules source, but GitHub Pages does not publish them. Copy the file into the Firebase console and publish it after any rules change (including list item `checked` or `name` updates and `meals` rules). List reads are split into `get` and `list`: a `get` of a missing list must be allowed, or `ensureBootstrap()` fails with `permission-denied` before it can create `shared-grocery`. `readDocOrMissing()` treats that denial as "missing" and then creates the doc. Queries use `list` and must stay constrained to `scope == shared` or `ownerUid == auth.uid`. Meal access follows the same shared vs personal pattern as lists.
+
+### Add meal to list
+
+Adding a meal to the active grocery list uses normalized names (trim + lowercase) in `grocery-meals.mjs`. `matchMealItems()` pairs each meal ingredient with a list row; when several rows share a name, prefer an unchecked match (missing `checked` counts as unchecked). `itemsToAdd()` returns spellings not on the list yet (case-insensitive; duplicate ingredient names in the meal collapse to the first spelling). The client batch-adds missing items, then shows a dialog where each matched line can toggle the grocery item’s `checked` state. Meal and ingredient name parsing while editing meals is in `grocery-meal-editor.mjs` (`parseMealName`, `parseIngredientName`, `ingredientExists` for duplicate detection against the meal’s items; `mealEditorNameBlurAction`, `draftMealPersistResult`, `mealIngredientAddAttempt` (validation and focus hints for Add ingredient), and related helpers for draft vs saved meal editor behavior). Meal editor errors show in `#meal-editor-message` inside the dialog.
 
 ### Sign-in
 
@@ -77,10 +83,10 @@ python3 -m http.server 8000
 
 Open `http://localhost:8000/grocery.html`. The local server serves the working tree, so it is ahead of GitHub Pages until `main` is pushed.
 
-Item sort/check helpers:
+Item sort/check and meal helpers:
 
 ```bash
-node --test grocery-items.test.mjs
+node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs
 ```
 
 ## Deploy

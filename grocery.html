@@ -76,6 +76,25 @@
                 New personal list
               </button>
             </div>
+            <div class="sidebar__group">
+              <h2 class="sidebar__heading">Meals</h2>
+              <ul id="list-meals-shared" class="list-nav"></ul>
+              <button
+                id="btn-new-shared-meal"
+                class="btn btn--text"
+                type="button"
+              >
+                New shared meal
+              </button>
+              <ul id="list-meals-personal" class="list-nav"></ul>
+              <button
+                id="btn-new-personal-meal"
+                class="btn btn--text"
+                type="button"
+              >
+                New personal meal
+              </button>
+            </div>
           </aside>
 
           <main class="main" aria-live="polite">
@@ -137,6 +156,65 @@
 
         <p id="app-message" class="message message--error shell__message" hidden></p>
       </section>
+
+      <dialog
+        id="meal-dialog"
+        class="meal-dialog"
+        aria-labelledby="meal-dialog-title"
+      >
+        <h3 id="meal-dialog-title" class="meal-dialog__title"></h3>
+        <ul id="meal-dialog-items" class="meal-dialog__items items"></ul>
+        <div class="meal-dialog__footer">
+          <button
+            id="meal-dialog-close"
+            class="btn btn--primary"
+            type="button"
+          >
+            Done
+          </button>
+        </div>
+      </dialog>
+
+      <dialog id="meal-editor-dialog" class="meal-editor-dialog">
+        <label class="visually-hidden" for="meal-editor-name">Meal name</label>
+        <input
+          id="meal-editor-name"
+          class="meal-editor__name"
+          type="text"
+          name="mealName"
+          autocomplete="off"
+          placeholder="Meal name"
+          required
+        />
+        <p
+          id="meal-editor-message"
+          class="meal-editor__message message message--error"
+          hidden
+        ></p>
+        <form id="form-meal-ingredient" class="meal-editor__add-form add-form">
+          <label class="visually-hidden" for="input-meal-ingredient"
+            >Ingredient</label
+          >
+          <input
+            id="input-meal-ingredient"
+            class="add-form__input"
+            type="text"
+            name="ingredient"
+            autocomplete="off"
+            placeholder="Add an ingredient"
+          />
+          <button class="btn btn--primary" type="submit">Add</button>
+        </form>
+        <ul id="meal-editor-items" class="meal-editor__items items"></ul>
+        <div class="meal-editor__footer">
+          <button id="btn-delete-meal" class="btn btn--danger" type="button">
+            Delete meal
+          </button>
+          <button id="meal-editor-close" class="btn btn--ghost" type="button">
+            Close
+          </button>
+        </div>
+      </dialog>
     </div>
 
     <script type="module" src="grocery.js"></script>

@@ -14,6 +14,15 @@ service cloud.firestore {
       return list.scope == 'shared' || list.ownerUid == request.auth.uid;
     }
 
+    function mealData(mealId) {
+      return get(/databases/$(database)/documents/meals/$(mealId)).data;
+    }
+
+    function canAccessMeal(mealId) {
+      let meal = mealData(mealId);
+      return meal.scope == 'shared' || meal.ownerUid == request.auth.uid;
+    }
+
     function isSharedListId(listId) {
       return listData(listId).scope == 'shared';
     }
@@ -73,8 +82,62 @@ service cloud.firestore {
         allow update: if isSignedIn()
           && canAccessList(listId)
           && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
           && request.resource.data.checked is bool
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked']);
+          && (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked'])
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+          );
+      }
+    }
+
+    match /meals/{mealId} {
+      allow get: if isSignedIn()
+        && (!exists(/databases/$(database)/documents/meals/$(mealId))
+          || resource.data.scope == 'shared'
+          || resource.data.ownerUid == request.auth.uid);
+
+      allow list: if isSignedIn()
+        && (resource.data.scope == 'shared'
+          || resource.data.ownerUid == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasAll(['name', 'scope', 'createdAt', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.scope in ['shared', 'personal']
+        && (
+          (request.resource.data.scope == 'shared'
+            && (!('ownerUid' in request.resource.data)
+              || request.resource.data.ownerUid == null))
+          || (request.resource.data.scope == 'personal'
+            && request.resource.data.ownerUid == request.auth.uid)
+        );
+
+      allow update: if isSignedIn()
+        && (resource.data.scope == 'shared'
+          || resource.data.ownerUid == request.auth.uid)
+        && request.resource.data.scope == resource.data.scope
+        && (
+          resource.data.scope == 'shared'
+          || request.resource.data.ownerUid == resource.data.ownerUid
+        );
+
+      allow delete: if isSignedIn()
+        && (resource.data.scope == 'shared'
+          || resource.data.ownerUid == request.auth.uid);
+
+      match /items/{itemId} {
+        allow read, delete: if isSignedIn() && canAccessMeal(mealId);
+
+        allow create: if isSignedIn()
+          && canAccessMeal(mealId)
+          && request.resource.data.keys().hasOnly(['name', 'createdAt'])
+          && request.resource.data.name is string;
+
+        allow update: if isSignedIn()
+          && canAccessMeal(mealId)
+          && request.resource.data.name is string
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);
       }
     }
   }

@@ -7,6 +7,14 @@
         { "fieldPath": "scope", "order": "ASCENDING" },
         { "fieldPath": "ownerUid", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "meals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "scope", "order": "ASCENDING" },
+        { "fieldPath": "ownerUid", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
