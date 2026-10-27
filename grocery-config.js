@@ -6,4 +6,4 @@
  * Google Cloud Console → Credentials → same client → Authorized JavaScript
  * origins must include https://daemonmaker.github.io and http://localhost.
  */
-export const GOOGLE_OAUTH_CLIENT_ID = "";
+export const GOOGLE_OAUTH_CLIENT_ID = "75529110090-gaaklg7li6q10novu9s14a5821kvef25.apps.googleusercontent.com";
