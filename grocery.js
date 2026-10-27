@@ -11,6 +11,7 @@ import {
   GOOGLE_OAUTH_CLIENT_ID,
   GOOGLE_OAUTH_REDIRECT_URI,
 } from "./grocery-config.js";
+import { isChecked, sortItems } from "./grocery-items.mjs";
 import {
   getFirestore,
   collection,
@@ -61,6 +62,7 @@ const itemsEmptyEl = document.getElementById("items-empty");
 const btnSetDefault = document.getElementById("btn-set-default");
 const formAddItem = document.getElementById("form-add-item");
 const inputItem = document.getElementById("input-item");
+const itemSortEl = document.getElementById("item-sort");
 
 const state = {
   user: null,
@@ -69,6 +71,7 @@ const state = {
   sharedLists: [],
   personalLists: [],
   items: [],
+  itemSort: "name",
   ready: false,
 };
 
@@ -239,12 +242,23 @@ function renderItems() {
   itemsEl.replaceChildren();
   itemsEmptyEl.hidden = state.items.length > 0;
 
-  for (const item of state.items) {
+  for (const item of sortItems(state.items, state.itemSort)) {
     const li = document.createElement("li");
     li.className = "items__row";
 
+    const checked = isChecked(item);
+
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.className = "items__check";
+    check.checked = checked;
+    check.setAttribute("aria-label", item.name);
+    check.addEventListener("change", () => toggleItem(item.id));
+
     const name = document.createElement("p");
-    name.className = "items__name";
+    name.className = checked
+      ? "items__name items__name--done"
+      : "items__name";
     name.textContent = item.name;
 
     const removeBtn = document.createElement("button");
@@ -253,6 +267,7 @@ function renderItems() {
     removeBtn.textContent = "Remove";
     removeBtn.addEventListener("click", () => removeItem(item.id));
 
+    li.appendChild(check);
     li.appendChild(name);
     li.appendChild(removeBtn);
     itemsEl.appendChild(li);
@@ -270,6 +285,7 @@ function renderToolbar() {
     document.getElementById("btn-delete-list").disabled = true;
     formAddItem.querySelector("button").disabled = true;
     inputItem.disabled = true;
+    itemSortEl.disabled = true;
     return;
   }
 
@@ -283,6 +299,7 @@ function renderToolbar() {
   document.getElementById("btn-delete-list").disabled = false;
   formAddItem.querySelector("button").disabled = false;
   inputItem.disabled = false;
+  itemSortEl.disabled = false;
 }
 
 function renderAll() {
@@ -514,6 +531,7 @@ async function addItem(event) {
   setAppMessage("");
   await addDoc(collection(db, "lists", active.id, "items"), {
     name,
+    checked: false,
     createdAt: serverTimestamp(),
   });
   inputItem.value = "";
@@ -527,6 +545,21 @@ async function removeItem(itemId) {
   }
   setAppMessage("");
   await deleteDoc(doc(db, "lists", active.id, "items", itemId));
+}
+
+async function toggleItem(itemId) {
+  const active = getListById(state.activeListId);
+  if (!active) {
+    return;
+  }
+  const item = state.items.find((entry) => entry.id === itemId);
+  if (!item) {
+    return;
+  }
+  setAppMessage("");
+  await updateDoc(doc(db, "lists", active.id, "items", itemId), {
+    checked: !isChecked(item),
+  });
 }
 
 function oauthRedirectUri() {
@@ -684,6 +717,11 @@ btnSetDefault.addEventListener("click", () => {
 });
 
 formAddItem.addEventListener("submit", addItem);
+
+itemSortEl.addEventListener("change", () => {
+  state.itemSort = itemSortEl.value;
+  renderItems();
+});
 
 async function initAuth() {
   showLogin();

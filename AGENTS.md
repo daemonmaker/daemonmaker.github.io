@@ -21,12 +21,12 @@ Firebase project `daemonmaker-grocery`. Firestore region `us-west3`. The web API
 
 - `config/app.defaultListId` — shared list everyone opens after sign-in.
 - `lists/{listId}` — `name`, `scope` (`shared` | `personal`), `ownerUid` (personal only), `createdAt`, `updatedAt`.
-- `lists/{listId}/items/{itemId}` — `name`, `createdAt`. Add and remove only; no check-off.
+- `lists/{listId}/items/{itemId}` — `name`, `createdAt`, `checked` (boolean). Missing `checked` is treated as unchecked in the UI. Client sort by name or checked state (`grocery-items.mjs`).
 - Bootstrap list id `shared-grocery`, name `Grocery`.
 
 Any signed-in user can create, rename, delete, and edit shared lists and their items. Personal lists are owner-only. Only a shared list can be the global default. Deleting the default reassigns it or recreates `shared-grocery`.
 
-`firestore.rules` is the rules source, but GitHub Pages does not publish them. Copy the file into the Firebase console and publish it. List reads are split into `get` and `list`: a `get` of a missing list must be allowed, or `ensureBootstrap()` fails with `permission-denied` before it can create `shared-grocery`. `readDocOrMissing()` treats that denial as "missing" and then creates the doc. Queries use `list` and must stay constrained to `scope == shared` or `ownerUid == auth.uid`.
+`firestore.rules` is the rules source, but GitHub Pages does not publish them. Copy the file into the Firebase console and publish it after any rules change (including item `checked` updates). List reads are split into `get` and `list`: a `get` of a missing list must be allowed, or `ensureBootstrap()` fails with `permission-denied` before it can create `shared-grocery`. `readDocOrMissing()` treats that denial as "missing" and then creates the doc. Queries use `list` and must stay constrained to `scope == shared` or `ownerUid == auth.uid`.
 
 ### Sign-in
 
@@ -76,6 +76,12 @@ python3 -m http.server 8000
 ```
 
 Open `http://localhost:8000/grocery.html`. The local server serves the working tree, so it is ahead of GitHub Pages until `main` is pushed.
+
+Item sort/check helpers:
+
+```bash
+node --test grocery-items.test.mjs
+```
 
 ## Deploy
 

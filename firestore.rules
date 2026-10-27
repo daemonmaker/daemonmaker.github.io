@@ -66,12 +66,15 @@ service cloud.firestore {
 
         allow create: if isSignedIn()
           && canAccessList(listId)
-          && request.resource.data.keys().hasAll(['name', 'createdAt'])
-          && request.resource.data.name is string;
+          && request.resource.data.keys().hasAll(['name', 'createdAt', 'checked'])
+          && request.resource.data.name is string
+          && request.resource.data.checked is bool;
 
         allow update: if isSignedIn()
           && canAccessList(listId)
-          && request.resource.data.name is string;
+          && request.resource.data.name is string
+          && request.resource.data.checked is bool
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked']);
       }
     }
   }
