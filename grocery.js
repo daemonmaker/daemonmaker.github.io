@@ -46,7 +46,7 @@ const viewApp = document.getElementById("view-app");
 const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
 const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
-let tokenClient = null;
+const OAUTH_NONCE_KEY = "grocery_google_oauth_nonce";
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
 const listSharedEl = document.getElementById("list-shared");
@@ -522,75 +522,83 @@ function oauthRedirectUri() {
   return GOOGLE_OAUTH_REDIRECT_URI;
 }
 
-function whenGoogleReady(timeoutMs = 15000) {
-  return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.oauth2) {
-      resolve();
-      return;
-    }
-    const started = Date.now();
-    const timer = window.setInterval(() => {
-      if (window.google?.accounts?.oauth2) {
-        window.clearInterval(timer);
-        resolve();
-        return;
-      }
-      if (Date.now() - started >= timeoutMs) {
-        window.clearInterval(timer);
-        reject(new Error("Google Sign-In failed to load."));
-      }
-    }, 50);
-  });
+function randomNonce() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function handleTokenResponse(response) {
-  if (response.error) {
-    setLoginBusy(false);
-    setLoginError(response.error_description || response.error);
+function signInWithGoogle() {
+  setLoginError("");
+  setLoginBusy(true, "Redirecting to Google…");
+  const nonce = randomNonce();
+  localStorage.setItem(OAUTH_NONCE_KEY, nonce);
+  const params = new URLSearchParams({
+    client_id: GOOGLE_OAUTH_CLIENT_ID,
+    redirect_uri: oauthRedirectUri(),
+    response_type: "id_token token",
+    response_mode: "fragment",
+    scope: "openid email profile",
+    prompt: "select_account",
+    nonce,
+  });
+  window.location.assign(
+    `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+  );
+}
+
+function decodeJwtPayload(idToken) {
+  const payload = idToken.split(".")[1];
+  if (!payload) {
+    return null;
+  }
+  const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  return JSON.parse(atob(padded));
+}
+
+async function completeGoogleRedirect() {
+  const storedHash = sessionStorage.getItem("grocery_oauth_hash");
+  if (!storedHash) {
     return;
   }
-  if (!response.access_token) {
-    setLoginBusy(false);
+  sessionStorage.removeItem("grocery_oauth_hash");
+
+  const hash = new URLSearchParams(storedHash.replace(/^#/, ""));
+  const oauthError = hash.get("error");
+  const idToken = hash.get("id_token");
+  const accessToken = hash.get("access_token");
+  const expectedNonce = localStorage.getItem(OAUTH_NONCE_KEY);
+  localStorage.removeItem(OAUTH_NONCE_KEY);
+
+  if (oauthError) {
+    setLoginError(hash.get("error_description") || oauthError);
+    return;
+  }
+  if (!idToken && !accessToken) {
     setLoginError("Google did not return a sign-in token.");
     return;
   }
 
-  setLoginBusy(true, "Signing in…");
   try {
-    const credential = GoogleAuthProvider.credential(null, response.access_token);
+    if (idToken && expectedNonce) {
+      const nonce = decodeJwtPayload(idToken)?.nonce;
+      if (nonce && nonce !== expectedNonce) {
+        setLoginError("Sign-in could not be verified. Please try again.");
+        return;
+      }
+    }
+    setLoginBusy(true, "Signing in…");
+    const credential = GoogleAuthProvider.credential(
+      idToken || null,
+      accessToken || null,
+    );
     await signInWithCredential(auth, credential);
   } catch (error) {
     setLoginError(error.message || "Sign-in failed.");
   } finally {
     setLoginBusy(false);
   }
-}
-
-async function initGoogleSignIn() {
-  await whenGoogleReady();
-  tokenClient = window.google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_OAUTH_CLIENT_ID,
-    scope: "openid email profile",
-    ux_mode: "redirect",
-    redirect_uri: oauthRedirectUri(),
-    callback: (response) => {
-      handleTokenResponse(response);
-    },
-    error_callback: (error) => {
-      setLoginBusy(false);
-      setLoginError(error.message || error.type || "Sign-in failed.");
-    },
-  });
-}
-
-function signInWithGoogle() {
-  setLoginError("");
-  if (!tokenClient) {
-    setLoginError("Google Sign-In is not ready yet.");
-    return;
-  }
-  setLoginBusy(true, "Redirecting to Google…");
-  tokenClient.requestAccessToken();
 }
 
 async function startSession(user) {
@@ -678,11 +686,7 @@ async function initAuth() {
   btnGoogleSignIn.addEventListener("click", () => {
     signInWithGoogle();
   });
-  try {
-    await initGoogleSignIn();
-  } catch (error) {
-    setLoginError(error.message || "Could not start Google Sign-In.");
-  }
+  await completeGoogleRedirect();
 }
 
 initAuth();

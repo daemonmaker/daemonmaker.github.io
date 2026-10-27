@@ -7,7 +7,20 @@
     <meta name="description" content="Shared and personal grocery lists." />
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="grocery.css" />
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+      (function () {
+        var hash = location.hash;
+        if (
+          hash &&
+          (hash.indexOf("access_token=") !== -1 ||
+            hash.indexOf("id_token=") !== -1 ||
+            hash.indexOf("error=") !== -1)
+        ) {
+          sessionStorage.setItem("grocery_oauth_hash", hash);
+          history.replaceState(null, "", location.pathname + location.search);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="app" class="app">
