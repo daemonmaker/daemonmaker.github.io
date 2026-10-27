@@ -169,6 +169,10 @@ body {
   font-size: 0.95rem;
 }
 
+.google-signin-button {
+  min-height: 44px;
+}
+
 .shell {
   max-width: var(--max-width);
   margin: 0 auto;

@@ -91,8 +91,17 @@ private to the owner. Only shared lists can be set as the global default.
    publish.
 5. **Firestore → Indexes** — if prompted, create the composite index for
    `lists` on `scope` + `ownerUid` (see [firestore.indexes.json](firestore.indexes.json)).
+6. **Google OAuth client ID** — copy the **Web client ID** from Firebase Console
+   → Authentication → Sign-in method → Google → Web SDK configuration. Paste
+   it into [grocery-config.js](grocery-config.js) as `GOOGLE_OAUTH_CLIENT_ID`
+   (public value, safe to commit). In [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+   → Credentials → that Web client → **Authorized JavaScript origins**, ensure
+   `https://daemonmaker.github.io` and `http://localhost` are listed.
 
-Local preview: `python3 -m http.server 8000` then open `/grocery.html` (Firebase
-auth works on `localhost` when authorized). Sign-in uses **Google redirect**
-(full-page), not a popup, so it works reliably on GitHub Pages with current
-Chrome COOP behavior.
+Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
+
+**Why not Firebase popup/redirect?** GitHub Pages cannot host Firebase’s
+`__/auth/*` helpers, and browsers block the cross-site storage handoff between
+`github.io` and `firebaseapp.com`. Sign-in uses **Google Identity Services** plus
+Firebase `signInWithCredential`, which completes entirely on your page origin.
+See [Firebase redirect best practices](https://firebase.google.com/docs/auth/web/redirect-best-practices).

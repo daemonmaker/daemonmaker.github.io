@@ -3,10 +3,10 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithCredential,
   signOut,
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { GOOGLE_OAUTH_CLIENT_ID } from "./grocery-config.js";
 import {
   getFirestore,
   collection,
@@ -38,13 +38,11 @@ const BOOTSTRAP_LIST_ID = "shared-grocery";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
-
 const viewLogin = document.getElementById("view-login");
 const viewApp = document.getElementById("view-app");
 const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
-const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
+const googleSignInButton = document.getElementById("google-signin-button");
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
 const listSharedEl = document.getElementById("list-shared");
@@ -91,7 +89,10 @@ function setLoginError(message) {
 }
 
 function setLoginBusy(busy, statusText = "") {
-  btnGoogleSignIn.disabled = busy;
+  if (googleSignInButton) {
+    googleSignInButton.style.pointerEvents = busy ? "none" : "";
+    googleSignInButton.style.opacity = busy ? "0.55" : "";
+  }
   if (statusText) {
     loginStatus.hidden = false;
     loginStatus.textContent = statusText;
@@ -513,15 +514,65 @@ async function removeItem(itemId) {
   await deleteDoc(doc(db, "lists", active.id, "items", itemId));
 }
 
-async function signInWithGoogle() {
+function whenGoogleIdentityReady(timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) {
+      resolve();
+      return;
+    }
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      if (window.google?.accounts?.id) {
+        window.clearInterval(timer);
+        resolve();
+        return;
+      }
+      if (Date.now() - started >= timeoutMs) {
+        window.clearInterval(timer);
+        reject(new Error("Google Sign-In library failed to load."));
+      }
+    }, 50);
+  });
+}
+
+async function handleGoogleCredential(response) {
   setLoginError("");
-  setLoginBusy(true, "Redirecting to Google…");
+  setLoginBusy(true, "Signing in…");
   try {
-    await signInWithRedirect(auth, googleProvider);
+    const credential = GoogleAuthProvider.credential(response.credential);
+    await signInWithCredential(auth, credential);
   } catch (error) {
     setLoginBusy(false);
     setLoginError(error.message || "Sign-in failed.");
   }
+}
+
+async function initGoogleSignIn() {
+  if (!GOOGLE_OAUTH_CLIENT_ID) {
+    setLoginError(
+      "Set GOOGLE_OAUTH_CLIENT_ID in grocery-config.js (Firebase Console → Authentication → Google → Web client ID).",
+    );
+    return;
+  }
+
+  await whenGoogleIdentityReady();
+
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_OAUTH_CLIENT_ID,
+    callback: handleGoogleCredential,
+    auto_select: false,
+    cancel_on_tap_outside: true,
+  });
+
+  window.google.accounts.id.renderButton(googleSignInButton, {
+    type: "standard",
+    theme: "outline",
+    size: "large",
+    text: "signin_with",
+    shape: "rectangular",
+    logo_alignment: "left",
+    width: 280,
+  });
 }
 
 async function startSession(user) {
@@ -568,10 +619,6 @@ function endSession() {
   showLogin();
 }
 
-btnGoogleSignIn.addEventListener("click", () => {
-  signInWithGoogle();
-});
-
 document.getElementById("btn-sign-out").addEventListener("click", async () => {
   await signOut(auth);
 });
@@ -598,16 +645,8 @@ btnSetDefault.addEventListener("click", () => {
 
 formAddItem.addEventListener("submit", addItem);
 
-async function initAuth() {
+function initAuth() {
   showLogin();
-  setLoginBusy(true, "Checking sign-in…");
-
-  try {
-    await getRedirectResult(auth);
-  } catch (error) {
-    setLoginBusy(false);
-    setLoginError(error.message || "Sign-in failed.");
-  }
 
   onAuthStateChanged(auth, (user) => {
     setLoginBusy(false);
@@ -616,6 +655,11 @@ async function initAuth() {
     } else {
       endSession();
     }
+  });
+
+  initGoogleSignIn().catch((error) => {
+    setLoginBusy(false);
+    setLoginError(error.message || "Could not initialize Google Sign-In.");
   });
 }
 
