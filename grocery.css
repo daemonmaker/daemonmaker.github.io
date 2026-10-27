@@ -491,10 +491,23 @@ body {
   background: rgba(21, 23, 26, 0.45);
 }
 
-.meal-dialog__title {
-  margin: 0 0 1rem;
+.meal-dialog__title-region {
+  margin-bottom: 0.75rem;
+}
+
+.meal-dialog__message {
+  margin: 0 0 0.75rem;
+}
+
+.meal-dialog .meal-editor__name,
+.meal-dialog .meal-editor__name-input {
   font-size: 1.2rem;
   line-height: 1.3;
+}
+
+.meal-dialog .items__name,
+.meal-dialog .items__name-input {
+  font-size: inherit;
 }
 
 .meal-dialog__items,

@@ -33,6 +33,7 @@ export function matchMealItems(mealItems, groceryItems) {
         : findGroceryMatch(normalized, groceryItems);
     if (!groceryItem) {
       return {
+        id: meal.id,
         name: meal.name,
         groceryItem: null,
         onList: false,
@@ -40,6 +41,7 @@ export function matchMealItems(mealItems, groceryItems) {
       };
     }
     return {
+      id: meal.id,
       name: meal.name,
       groceryItem,
       onList: true,

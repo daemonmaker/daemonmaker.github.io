@@ -160,9 +160,18 @@
       <dialog
         id="meal-dialog"
         class="meal-dialog"
-        aria-labelledby="meal-dialog-title"
+        aria-labelledby="meal-dialog-title-region"
       >
-        <h3 id="meal-dialog-title" class="meal-dialog__title"></h3>
+        <div
+          id="meal-dialog-title-region"
+          class="meal-dialog__title-region"
+          aria-label="Meal name"
+        ></div>
+        <p
+          id="meal-dialog-message"
+          class="meal-dialog__message message message--error"
+          hidden
+        ></p>
         <ul id="meal-dialog-items" class="meal-dialog__items items"></ul>
         <div class="meal-dialog__footer">
           <button

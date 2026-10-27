@@ -22,16 +22,29 @@ describe("normalizeItemName", () => {
 
 describe("matchMealItems", () => {
   it("matches grocery items case-insensitively and preserves meal name spelling", () => {
-    const mealItems = [{ name: "Milk" }];
+    const mealItems = [{ id: "meal-milk", name: "Milk" }];
     const groceryItems = [{ id: "1", name: "milk", checked: false }];
     assert.deepEqual(matchMealItems(mealItems, groceryItems), [
       {
+        id: "meal-milk",
         name: "Milk",
         groceryItem: { id: "1", name: "milk", checked: false },
         onList: true,
         checked: false,
       },
     ]);
+  });
+
+  it("passes through meal item id on every row including no-match", () => {
+    const mealItems = [
+      { id: "a", name: "Milk" },
+      { id: "b", name: "Salt" },
+    ];
+    const groceryItems = [{ id: "1", name: "milk", checked: false }];
+    const result = matchMealItems(mealItems, groceryItems);
+    assert.equal(result[0].id, "a");
+    assert.equal(result[1].id, "b");
+    assert.equal(result[1].onList, false);
   });
 
   it("prefers unchecked grocery row when multiple share the same name", () => {
@@ -63,6 +76,7 @@ describe("matchMealItems", () => {
     const groceryItems = [{ id: "1", name: "milk", checked: false }];
     assert.deepEqual(matchMealItems(mealItems, groceryItems), [
       {
+        id: undefined,
         name: "butter",
         groceryItem: null,
         onList: false,

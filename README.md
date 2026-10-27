@@ -95,11 +95,13 @@ meals work the same way; personal meals are owner-only.
 
 When you add a meal to the active list, ingredients are matched to list items
 by normalized name (trim + lowercase). Missing items are batch-added to the
-list. A confirmation dialog lists each ingredient and lets you toggle `checked`
-on the matching grocery row (duplicate names prefer an unchecked row). Logic
-lives in `grocery-meals.mjs`; meal editing and inline rename helpers in
-`grocery-meal-editor.mjs` (ingredient duplicate detection excludes the row
-being renamed).
+list. The confirmation dialog lists each ingredient and lets you toggle `checked`
+on the matching grocery row (duplicate names prefer an unchecked row). You can
+also click the meal title or an ingredient name in that dialog to rename them
+inline (same interaction as the meal editor). Rename errors appear in
+`#meal-dialog-message`. Logic lives in `grocery-meals.mjs`; meal editing and
+inline rename helpers in `grocery-meal-editor.mjs` (ingredient duplicate
+detection excludes the row being renamed).
 
 ### Firebase console checklist (one-time)
 
