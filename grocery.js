@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import {
-  getAuth,
+  initializeAuth,
+  browserLocalPersistence,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithCredential,
@@ -29,7 +30,7 @@ import {
 
 const firebaseConfig = {
   apiKey: "AIzaSyBrh3SWdqneRJFzCuIwmkGqN_U0UG_YXFE",
-  authDomain: "daemonmaker.github.io",
+  authDomain: "daemonmaker-grocery.firebaseapp.com",
   projectId: "daemonmaker-grocery",
   storageBucket: "daemonmaker-grocery.firebasestorage.app",
   messagingSenderId: "75529110090",
@@ -39,7 +40,9 @@ const firebaseConfig = {
 const BOOTSTRAP_LIST_ID = "shared-grocery";
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+const auth = initializeAuth(app, {
+  persistence: browserLocalPersistence,
+});
 const db = getFirestore(app);
 const viewLogin = document.getElementById("view-login");
 const viewApp = document.getElementById("view-app");
@@ -539,7 +542,6 @@ function signInWithGoogle() {
     response_type: "id_token token",
     response_mode: "fragment",
     scope: "openid email profile",
-    prompt: "select_account",
     nonce,
   });
   window.location.assign(
@@ -595,7 +597,8 @@ async function completeGoogleRedirect() {
     );
     await signInWithCredential(auth, credential);
   } catch (error) {
-    setLoginError(error.message || "Sign-in failed.");
+    const code = error?.code ? `${error.code}: ` : "";
+    setLoginError(`${code}${error.message || "Sign-in failed."}`);
   } finally {
     setLoginBusy(false);
   }

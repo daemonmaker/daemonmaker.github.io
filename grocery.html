@@ -19,6 +19,11 @@
           sessionStorage.setItem("grocery_oauth_hash", hash);
           history.replaceState(null, "", location.pathname + location.search);
         }
+        Object.keys(sessionStorage).forEach(function (key) {
+          if (key.indexOf("firebase") !== -1) {
+            sessionStorage.removeItem(key);
+          }
+        });
       })();
     </script>
   </head>
