@@ -92,16 +92,15 @@ private to the owner. Only shared lists can be set as the global default.
    publish.
 5. **Firestore → Indexes** — if prompted, create the composite index for
    `lists` on `scope` + `ownerUid` (see [firestore.indexes.json](firestore.indexes.json)).
-6. **Google OAuth redirect URI** — in [Google Cloud Console](https://console.cloud.google.com/apis/credentials?project=daemonmaker-grocery)
+6. **Authorized JavaScript origins** — in [Google Cloud Console](https://console.cloud.google.com/apis/credentials?project=daemonmaker-grocery)
    → **Credentials** → the Web client whose ID matches
-   [grocery-config.js](grocery-config.js) → **Authorized redirect URIs**, add:
-   - `https://daemonmaker.github.io/grocery.html`
+   [grocery-config.js](grocery-config.js) → **Authorized JavaScript origins**, add
+   `https://daemonmaker.github.io`.
 
-   Also ensure **Authorized JavaScript origins** include `https://daemonmaker.github.io`.
-
-Sign-in is a full-page Google redirect back to `grocery.html`. Google returns
-an ID token in the URL hash (no client secret), and the page signs in to
-Firebase with `signInWithCredential`.
+Sign-in uses the Google button with FedCM (`use_fedcm_for_button`), then
+Firebase `signInWithCredential`. Full-page OAuth redirects are not used:
+Chrome drops or partitions the return trip on GitHub Pages, which sent you
+back to the login screen.
 
 Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
 

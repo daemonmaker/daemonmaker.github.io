@@ -6,10 +6,7 @@ import {
   signInWithCredential,
   signOut,
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import {
-  GOOGLE_OAUTH_CLIENT_ID,
-  GOOGLE_OAUTH_REDIRECT_URI,
-} from "./grocery-config.js";
+import { GOOGLE_OAUTH_CLIENT_ID } from "./grocery-config.js";
 import {
   getFirestore,
   collection,
@@ -45,7 +42,7 @@ const viewLogin = document.getElementById("view-login");
 const viewApp = document.getElementById("view-app");
 const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
-const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
+const googleSignInButton = document.getElementById("google-signin-button");
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
 const listSharedEl = document.getElementById("list-shared");
@@ -92,7 +89,8 @@ function setLoginError(message) {
 }
 
 function setLoginBusy(busy, statusText = "") {
-  btnGoogleSignIn.disabled = busy;
+  googleSignInButton.style.pointerEvents = busy ? "none" : "";
+  googleSignInButton.style.opacity = busy ? "0.6" : "";
   if (statusText) {
     loginStatus.hidden = false;
     loginStatus.textContent = statusText;
@@ -514,101 +512,60 @@ async function removeItem(itemId) {
   await deleteDoc(doc(db, "lists", active.id, "items", itemId));
 }
 
-const OAUTH_NONCE_KEY = "grocery_google_oauth_nonce";
-
-function getOAuthRedirectUri() {
-  if (window.location.hostname === "localhost") {
-    return `${window.location.origin}${window.location.pathname}`;
-  }
-  return GOOGLE_OAUTH_REDIRECT_URI;
-}
-
-function randomNonce() {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function startGoogleOAuthRedirect() {
-  setLoginError("");
-  setLoginBusy(true, "Redirecting to Google…");
-
-  const nonce = randomNonce();
-  localStorage.setItem(OAUTH_NONCE_KEY, nonce);
-
-  const params = new URLSearchParams({
-    client_id: GOOGLE_OAUTH_CLIENT_ID,
-    redirect_uri: getOAuthRedirectUri(),
-    response_type: "id_token token",
-    scope: "openid email profile",
-    prompt: "select_account",
-    nonce,
-  });
-  window.location.assign(
-    `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
-  );
-}
-
-function decodeJwtPayload(idToken) {
-  const payload = idToken.split(".")[1];
-  if (!payload) {
-    return null;
-  }
-  const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-  return JSON.parse(atob(padded));
-}
-
-async function completeGoogleOAuthReturn() {
-  const query = new URLSearchParams(window.location.search);
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const oauthError = hash.get("error") || query.get("error");
-  const idToken = hash.get("id_token");
-  const accessToken = hash.get("access_token");
-  const hadPendingSignIn = Boolean(localStorage.getItem(OAUTH_NONCE_KEY));
-
-  if (!oauthError && !idToken && !accessToken) {
-    if (hadPendingSignIn) {
-      localStorage.removeItem(OAUTH_NONCE_KEY);
-      setLoginError(
-        "Google sent you back without a sign-in token. Check Authorized redirect URIs includes https://daemonmaker.github.io/grocery.html",
-      );
+function whenGoogleIdentityReady(timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) {
+      resolve();
+      return;
     }
-    return;
-  }
-
-  history.replaceState(null, "", window.location.pathname);
-  const expectedNonce = localStorage.getItem(OAUTH_NONCE_KEY);
-  localStorage.removeItem(OAUTH_NONCE_KEY);
-
-  if (oauthError) {
-    setLoginError(
-      hash.get("error_description") ||
-        query.get("error_description") ||
-        oauthError,
-    );
-    return;
-  }
-
-  try {
-    if (idToken && expectedNonce) {
-      const nonce = decodeJwtPayload(idToken)?.nonce;
-      if (nonce && nonce !== expectedNonce) {
-        setLoginError("Sign-in could not be verified. Please try again.");
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      if (window.google?.accounts?.id) {
+        window.clearInterval(timer);
+        resolve();
         return;
       }
-    }
+      if (Date.now() - started >= timeoutMs) {
+        window.clearInterval(timer);
+        reject(new Error("Google Sign-In failed to load."));
+      }
+    }, 50);
+  });
+}
 
-    setLoginBusy(true, "Signing in…");
-    const credential = GoogleAuthProvider.credential(
-      idToken || null,
-      accessToken || null,
-    );
+async function handleGoogleCredential(response) {
+  setLoginError("");
+  setLoginBusy(true, "Signing in…");
+  try {
+    const credential = GoogleAuthProvider.credential(response.credential);
     await signInWithCredential(auth, credential);
   } catch (error) {
     setLoginBusy(false);
     setLoginError(error.message || "Sign-in failed.");
   }
+}
+
+async function initGoogleSignIn() {
+  if (!GOOGLE_OAUTH_CLIENT_ID) {
+    setLoginError("Missing Google client ID in grocery-config.js.");
+    return;
+  }
+  await whenGoogleIdentityReady();
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_OAUTH_CLIENT_ID,
+    callback: handleGoogleCredential,
+    use_fedcm_for_button: true,
+    auto_select: false,
+    cancel_on_tap_outside: true,
+  });
+  window.google.accounts.id.renderButton(googleSignInButton, {
+    type: "standard",
+    theme: "filled_blue",
+    size: "large",
+    text: "signin_with",
+    shape: "rectangular",
+    width: 280,
+  });
 }
 
 async function startSession(user) {
@@ -693,10 +650,11 @@ async function initAuth() {
     }
   });
 
-  btnGoogleSignIn.addEventListener("click", () => {
-    startGoogleOAuthRedirect();
-  });
-  await completeGoogleOAuthReturn();
+  try {
+    await initGoogleSignIn();
+  } catch (error) {
+    setLoginError(error.message || "Could not start Google Sign-In.");
+  }
 }
 
 initAuth();
