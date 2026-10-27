@@ -512,7 +512,11 @@ async function removeItem(itemId) {
 }
 
 function getOAuthRedirectUri() {
-  return `${window.location.origin}${window.location.pathname}`;
+  let path = window.location.pathname;
+  if (path.length > 1 && path.endsWith("/")) {
+    path = path.slice(0, -1);
+  }
+  return `${window.location.origin}${path}`;
 }
 
 function startGoogleOAuthRedirect() {
@@ -562,6 +566,16 @@ async function completeGoogleOAuthFromHash() {
   return true;
 }
 
+function showOAuthRedirectHint() {
+  const hint = document.getElementById("oauth-redirect-hint");
+  if (!hint || !GOOGLE_OAUTH_CLIENT_ID) {
+    return;
+  }
+  const redirectUri = getOAuthRedirectUri();
+  hint.hidden = false;
+  hint.textContent = `If Google shows redirect_uri_mismatch, add this exact URI under Google Cloud → Credentials → your Web client → Authorized redirect URIs: ${redirectUri}`;
+}
+
 function initGoogleSignIn() {
   if (!GOOGLE_OAUTH_CLIENT_ID) {
     setLoginError(
@@ -570,6 +584,7 @@ function initGoogleSignIn() {
     return;
   }
 
+  showOAuthRedirectHint();
   btnGoogleSignIn.addEventListener("click", startGoogleOAuthRedirect);
 }
 
