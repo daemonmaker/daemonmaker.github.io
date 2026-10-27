@@ -84,7 +84,8 @@ Firestore project `daemonmaker-grocery`.
 - **`meals/{mealId}`** — saved meals (not grocery lists): same fields as a list
   (`name`, `scope`, `ownerUid`, timestamps).
 - **`meals/{mealId}/items/{itemId}`** — ingredient lines: `name`, `createdAt`
-  only. No `checked` field.
+  only. No `checked` field. In the meal editor, click the meal title or an
+  ingredient name to rename inline (same interaction as grocery list items).
 
 Shared lists are visible and editable by any signed-in user. Personal lists are
 private to the owner. Only shared lists can be set as the global default. Shared
@@ -96,7 +97,9 @@ When you add a meal to the active list, ingredients are matched to list items
 by normalized name (trim + lowercase). Missing items are batch-added to the
 list. A confirmation dialog lists each ingredient and lets you toggle `checked`
 on the matching grocery row (duplicate names prefer an unchecked row). Logic
-lives in `grocery-meals.mjs`; meal editing helpers in `grocery-meal-editor.mjs`.
+lives in `grocery-meals.mjs`; meal editing and inline rename helpers in
+`grocery-meal-editor.mjs` (ingredient duplicate detection excludes the row
+being renamed).
 
 ### Firebase console checklist (one-time)
 

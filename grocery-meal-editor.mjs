@@ -1,3 +1,8 @@
+import {
+  itemNameCommitAction,
+  itemNameCommitUIEffect,
+} from "./grocery-items.mjs";
+
 function parseNonEmptyName(input) {
   const trimmed = String(input).trim();
   return trimmed === "" ? null : trimmed;
@@ -22,6 +27,89 @@ export function ingredientExists(items, name) {
   }
   const needle = normalizeName(parsed);
   return items.some((item) => normalizeName(item.name) === needle);
+}
+
+export function ingredientExistsAmongOthers(items, name, excludeItemId) {
+  const parsed = parseIngredientName(name);
+  if (parsed === null) {
+    return false;
+  }
+  const needle = normalizeName(parsed);
+  return items.some(
+    (item) =>
+      item.id !== excludeItemId && normalizeName(item.name) === needle,
+  );
+}
+
+export function mealIngredientNameCommitAction({
+  nameInput,
+  existingName,
+  items,
+  editingItemId,
+}) {
+  const action = itemNameCommitAction({ nameInput, existingName });
+  if (
+    action.type === "rename" &&
+    ingredientExistsAmongOthers(items, action.name, editingItemId)
+  ) {
+    return {
+      type: "reject_duplicate",
+      restoreName: existingName,
+      userMessage: "That ingredient is already on this meal.",
+    };
+  }
+  return action;
+}
+
+export function mealIngredientNameCommitUIEffect(action) {
+  if (action.type === "reject_duplicate") {
+    return {
+      exitEditMode: true,
+      firestoreName: null,
+      userMessage: action.userMessage,
+    };
+  }
+  const base = itemNameCommitUIEffect(action);
+  if (action.type === "reject_empty") {
+    return {
+      ...base,
+      userMessage: "Ingredient name cannot be empty.",
+    };
+  }
+  return base;
+}
+
+export function mealEditorTitleCommitUIEffect(action) {
+  if (action.type === "noop") {
+    return {
+      exitEditMode: true,
+      mealFirestoreName: null,
+      persistDraft: false,
+      userMessage: null,
+    };
+  }
+  if (action.type === "reject_empty") {
+    return {
+      exitEditMode: true,
+      mealFirestoreName: null,
+      persistDraft: false,
+      userMessage: "Meal name cannot be empty.",
+    };
+  }
+  if (action.type === "persist_draft") {
+    return {
+      exitEditMode: true,
+      mealFirestoreName: null,
+      persistDraft: true,
+      userMessage: null,
+    };
+  }
+  return {
+    exitEditMode: true,
+    mealFirestoreName: action.name,
+    persistDraft: false,
+    userMessage: null,
+  };
 }
 
 export function mealEditorDeleteAction(editingMealId) {

@@ -25,7 +25,11 @@ import { matchMealItems, itemsToAdd } from "./grocery-meals.mjs";
 import {
   mealEditorDeleteAction,
   draftMealPersistResult,
+  parseMealName,
   mealEditorNameBlurAction,
+  mealEditorTitleCommitUIEffect,
+  mealIngredientNameCommitAction,
+  mealIngredientNameCommitUIEffect,
   buildMealCreateFields,
   mealIngredientAddAttempt,
 } from "./grocery-meal-editor.mjs";
@@ -88,7 +92,7 @@ const mealDialogTitle = document.getElementById("meal-dialog-title");
 const mealDialogItemsEl = document.getElementById("meal-dialog-items");
 const mealDialogClose = document.getElementById("meal-dialog-close");
 const mealEditorDialog = document.getElementById("meal-editor-dialog");
-const mealEditorName = document.getElementById("meal-editor-name");
+const mealEditorNameRegion = document.getElementById("meal-editor-name-region");
 const formMealIngredient = document.getElementById("form-meal-ingredient");
 const inputMealIngredient = document.getElementById("input-meal-ingredient");
 const mealEditorItemsEl = document.getElementById("meal-editor-items");
@@ -113,11 +117,16 @@ const state = {
   mealDialogMealItems: [],
   editingMealId: null,
   draftMealScope: null,
+  draftMealTitle: "",
   mealEditorItems: [],
+  editingMealEditorTarget: null,
+  pendingMealTitleRename: null,
+  pendingMealIngredientRenames: {},
 };
 
 const unsubscribers = [];
 const itemRenameSkipBlur = new Set();
+const mealEditorRenameSkipBlur = new Set();
 let itemsUnsub = null;
 let mealEditorItemsUnsub = null;
 
@@ -177,7 +186,7 @@ function setMealEditorMessage(message) {
 
 function focusMealEditorField(focusField) {
   if (focusField === "meal_name") {
-    mealEditorName.focus();
+    void startMealTitleEdit();
     return;
   }
   if (focusField === "ingredient") {
@@ -438,26 +447,398 @@ function renderMealDialog() {
   }
 }
 
-function renderMealEditorItems() {
-  mealEditorItemsEl.replaceChildren();
-  for (const item of sortItems(state.mealEditorItems, "name")) {
-    const li = document.createElement("li");
-    li.className = "items__row";
+const MEAL_EDITOR_TITLE_KEY = "title";
 
-    const name = document.createElement("p");
-    name.className = "items__name";
-    name.textContent = item.name;
+function clearMealEditorEditState() {
+  state.editingMealEditorTarget = null;
+  state.pendingMealTitleRename = null;
+  state.pendingMealIngredientRenames = {};
+}
 
-    const removeBtn = document.createElement("button");
+function reconcileMealTitlePending() {
+  if (!state.pendingMealTitleRename || !state.editingMealId) {
+    return;
+  }
+  const meal = getMealById(state.editingMealId);
+  if (meal?.name === state.pendingMealTitleRename) {
+    state.pendingMealTitleRename = null;
+  }
+}
+
+function getMealEditorStoredTitle() {
+  if (state.editingMealId) {
+    return getMealById(state.editingMealId)?.name ?? "";
+  }
+  if (state.draftMealScope) {
+    return state.draftMealTitle;
+  }
+  return "";
+}
+
+function getMealEditorTitleDisplayName() {
+  const stored = getMealEditorStoredTitle();
+  const display = itemNameForDisplay(stored, state.pendingMealTitleRename);
+  return display === "" ? null : display;
+}
+
+function getMealEditorTitleValue() {
+  if (state.editingMealEditorTarget === MEAL_EDITOR_TITLE_KEY) {
+    const input = mealEditorNameRegion.querySelector(".meal-editor__name-input");
+    if (input) {
+      return input.value;
+    }
+  }
+  if (state.pendingMealTitleRename !== null) {
+    return state.pendingMealTitleRename;
+  }
+  return getMealEditorStoredTitle();
+}
+
+function getActiveMealEditorInlineInput() {
+  if (!state.editingMealEditorTarget) {
+    return null;
+  }
+  if (state.editingMealEditorTarget === MEAL_EDITOR_TITLE_KEY) {
+    return mealEditorNameRegion.querySelector(".meal-editor__name-input");
+  }
+  return mealEditorItemsEl.querySelector(
+    `input.items__name-input[data-item-id="${state.editingMealEditorTarget}"]`,
+  );
+}
+
+async function commitActiveMealEditorEdit() {
+  if (state.editingMealEditorTarget === MEAL_EDITOR_TITLE_KEY) {
+    await commitMealTitleEdit();
+    return;
+  }
+  if (state.editingMealEditorTarget) {
+    await commitMealIngredientEdit(state.editingMealEditorTarget);
+  }
+}
+
+async function startMealTitleEdit() {
+  await commitActiveMealEditorEdit();
+  state.editingMealEditorTarget = MEAL_EDITOR_TITLE_KEY;
+  renderMealEditor();
+  const input = mealEditorNameRegion.querySelector(".meal-editor__name-input");
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+function cancelMealTitleEdit() {
+  mealEditorRenameSkipBlur.add(MEAL_EDITOR_TITLE_KEY);
+  state.editingMealEditorTarget = null;
+  renderMealEditor();
+}
+
+async function startMealIngredientEdit(itemId) {
+  await commitActiveMealEditorEdit();
+  state.editingMealEditorTarget = itemId;
+  renderMealEditor();
+  const input = mealEditorItemsEl.querySelector(
+    `input.items__name-input[data-item-id="${itemId}"]`,
+  );
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+function cancelMealIngredientEdit(itemId) {
+  mealEditorRenameSkipBlur.add(itemId);
+  state.editingMealEditorTarget = null;
+  renderMealEditor();
+}
+
+async function commitMealTitleEdit() {
+  if (state.editingMealEditorTarget !== MEAL_EDITOR_TITLE_KEY) {
+    return;
+  }
+
+  const input = mealEditorNameRegion.querySelector(".meal-editor__name-input");
+  if (!input) {
+    state.editingMealEditorTarget = null;
+    renderMealEditor();
+    return;
+  }
+
+  const meal = state.editingMealId ? getMealById(state.editingMealId) : null;
+  const action = mealEditorNameBlurAction({
+    editingMealId: state.editingMealId,
+    draftMealScope: state.draftMealScope,
+    nameInput: input.value,
+    existingMealName: meal?.name ?? null,
+  });
+  const effect = mealEditorTitleCommitUIEffect(action);
+  const previousTitle = getMealEditorStoredTitle();
+
+  state.editingMealEditorTarget = null;
+  setMealEditorMessage(effect.userMessage ?? "");
+
+  if (action.type === "reject_empty") {
+    renderMealEditor();
+    return;
+  }
+
+  if (effect.persistDraft) {
+    const parsed = parseMealName(input.value);
+    if (parsed) {
+      state.draftMealTitle = parsed;
+    }
+    renderMealEditor();
+    await persistDraftMeal();
+    renderMealEditor();
+    return;
+  }
+
+  if (effect.mealFirestoreName) {
+    state.pendingMealTitleRename = effect.mealFirestoreName;
+    if (meal) {
+      meal.name = effect.mealFirestoreName;
+    }
+  } else if (action.type === "noop") {
+    /* keep stored title */
+  }
+
+  renderMealEditor();
+
+  if (!effect.mealFirestoreName || !state.editingMealId || !meal) {
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, "meals", state.editingMealId), {
+      name: effect.mealFirestoreName,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    state.pendingMealTitleRename = null;
+    meal.name = previousTitle;
+    setMealEditorMessage(error.message || "Could not rename meal.");
+    renderMealEditor();
+  }
+}
+
+async function commitMealIngredientEdit(itemId) {
+  if (state.editingMealEditorTarget !== itemId) {
+    return;
+  }
+
+  const mealId = state.editingMealId;
+  if (!mealId) {
+    state.editingMealEditorTarget = null;
+    renderMealEditor();
+    return;
+  }
+
+  const item = state.mealEditorItems.find((entry) => entry.id === itemId);
+  if (!item) {
+    state.editingMealEditorTarget = null;
+    renderMealEditor();
+    return;
+  }
+
+  const input = mealEditorItemsEl.querySelector(
+    `input.items__name-input[data-item-id="${itemId}"]`,
+  );
+  if (!input) {
+    state.editingMealEditorTarget = null;
+    renderMealEditor();
+    return;
+  }
+
+  const action = mealIngredientNameCommitAction({
+    nameInput: input.value,
+    existingName: item.name,
+    items: state.mealEditorItems,
+    editingItemId: itemId,
+  });
+  const effect = mealIngredientNameCommitUIEffect(action);
+  const previousName = item.name;
+
+  state.editingMealEditorTarget = null;
+  item.name = itemNameDisplayAfterCommit(action, previousName);
+  setMealEditorMessage(effect.userMessage ?? "");
+  renderMealEditor();
+
+  if (!effect.firestoreName) {
+    return;
+  }
+
+  state.pendingMealIngredientRenames[itemId] = effect.firestoreName;
+  renderMealEditor();
+
+  try {
+    await updateDoc(doc(db, "meals", mealId, "items", itemId), {
+      name: effect.firestoreName,
+    });
+  } catch (error) {
+    delete state.pendingMealIngredientRenames[itemId];
+    item.name = previousName;
+    setMealEditorMessage(error.message || "Could not rename ingredient.");
+    renderMealEditor();
+  }
+}
+
+function bindMealEditorInlineInput(input, blurKey, onCommit, onCancel) {
+  bindInlineNameInput(input, {
+    skipBlurSet: mealEditorRenameSkipBlur,
+    blurKey,
+    onCommit,
+    onCancel,
+  });
+}
+
+function renderMealEditorTitle() {
+  reconcileMealTitlePending();
+  const isEditing = state.editingMealEditorTarget === MEAL_EDITOR_TITLE_KEY;
+  const displayName = getMealEditorTitleDisplayName();
+  const placeholder = displayName === null;
+
+  let nameBtn = mealEditorNameRegion.querySelector("button.meal-editor__name");
+  let nameInput = mealEditorNameRegion.querySelector(".meal-editor__name-input");
+
+  if (isEditing) {
+    if (nameBtn) {
+      nameBtn.remove();
+    }
+    if (!nameInput) {
+      nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "meal-editor__name-input";
+      nameInput.setAttribute("aria-label", "Meal name");
+      nameInput.placeholder = "Meal name";
+      nameInput.value = displayName ?? "";
+      bindMealEditorInlineInput(
+        nameInput,
+        MEAL_EDITOR_TITLE_KEY,
+        () => commitMealTitleEdit(),
+        () => cancelMealTitleEdit(),
+      );
+      mealEditorNameRegion.appendChild(nameInput);
+    }
+  } else {
+    if (nameInput) {
+      nameInput.remove();
+    }
+    if (!nameBtn) {
+      nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.addEventListener("click", () => {
+        void startMealTitleEdit();
+      });
+      mealEditorNameRegion.appendChild(nameBtn);
+    }
+    nameBtn.className = placeholder
+      ? "meal-editor__name meal-editor__name--placeholder"
+      : "meal-editor__name";
+    nameBtn.textContent = displayName ?? "Meal name";
+  }
+}
+
+function ensureMealIngredientRowControls(li, item) {
+  let removeBtn = li.querySelector(".items__remove");
+  if (!removeBtn) {
+    removeBtn = document.createElement("button");
     removeBtn.type = "button";
-    removeBtn.className = "btn btn--ghost";
+    removeBtn.className = "btn btn--ghost items__remove";
     removeBtn.textContent = "Remove";
     removeBtn.addEventListener("click", () => removeMealIngredient(item.id));
-
-    li.appendChild(name);
     li.appendChild(removeBtn);
-    mealEditorItemsEl.appendChild(li);
   }
+}
+
+function renderMealEditorItems() {
+  const existingById = new Map();
+  for (const child of mealEditorItemsEl.children) {
+    if (child.dataset.itemId) {
+      existingById.set(child.dataset.itemId, child);
+    }
+  }
+
+  const sorted = sortItems(state.mealEditorItems, "name");
+  const nextIds = new Set();
+
+  for (const item of sorted) {
+    nextIds.add(item.id);
+    const isEditing = state.editingMealEditorTarget === item.id;
+    const displayName = itemNameForDisplay(
+      item.name,
+      state.pendingMealIngredientRenames[item.id],
+    );
+
+    let li = existingById.get(item.id);
+    if (!li) {
+      li = document.createElement("li");
+      li.className = "items__row";
+      li.dataset.itemId = item.id;
+      mealEditorItemsEl.appendChild(li);
+    }
+
+    ensureMealIngredientRowControls(li, item);
+
+    let nameBtn = li.querySelector("button.items__name");
+    let nameInput = li.querySelector("input.items__name-input");
+
+    if (isEditing) {
+      if (nameBtn) {
+        nameBtn.remove();
+      }
+      if (!nameInput) {
+        nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.className = "items__name-input";
+        nameInput.dataset.itemId = item.id;
+        nameInput.setAttribute("aria-label", "Ingredient name");
+        nameInput.value = displayName;
+        bindMealEditorInlineInput(
+          nameInput,
+          item.id,
+          () => commitMealIngredientEdit(item.id),
+          () => cancelMealIngredientEdit(item.id),
+        );
+        const removeBtn = li.querySelector(".items__remove");
+        li.insertBefore(nameInput, removeBtn);
+      }
+    } else {
+      if (nameInput) {
+        nameInput.remove();
+      }
+      if (!nameBtn) {
+        nameBtn = document.createElement("button");
+        nameBtn.type = "button";
+        nameBtn.addEventListener("click", () => {
+          void startMealIngredientEdit(item.id);
+        });
+        const removeBtn = li.querySelector(".items__remove");
+        li.insertBefore(nameBtn, removeBtn);
+      }
+      nameBtn.className = "items__name";
+      nameBtn.textContent = displayName;
+    }
+  }
+
+  for (const [itemId, li] of existingById) {
+    if (!nextIds.has(itemId)) {
+      li.remove();
+    }
+  }
+
+  if (!state.editingMealEditorTarget) {
+    for (const item of sorted) {
+      const li = mealEditorItemsEl.querySelector(`li[data-item-id="${item.id}"]`);
+      if (li) {
+        mealEditorItemsEl.appendChild(li);
+      }
+    }
+  }
+}
+
+function renderMealEditor() {
+  renderMealEditorTitle();
+  renderMealEditorItems();
 }
 
 function itemNameButtonClass(checked) {
@@ -545,26 +926,35 @@ async function commitItemNameEdit(itemId) {
   }
 }
 
-function bindItemNameInput(input, itemId) {
+function bindInlineNameInput(input, { skipBlurSet, blurKey, onCommit, onCancel }) {
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      commitItemNameEdit(itemId);
+      onCommit();
     }
     if (event.key === "Escape") {
       event.preventDefault();
-      cancelItemNameEdit(itemId);
+      onCancel();
     }
   });
   input.addEventListener("change", () => {
-    commitItemNameEdit(itemId);
+    onCommit();
   });
   input.addEventListener("blur", () => {
-    if (itemRenameSkipBlur.has(itemId)) {
-      itemRenameSkipBlur.delete(itemId);
+    if (skipBlurSet.has(blurKey)) {
+      skipBlurSet.delete(blurKey);
       return;
     }
-    commitItemNameEdit(itemId);
+    onCommit();
+  });
+}
+
+function bindItemNameInput(input, itemId) {
+  bindInlineNameInput(input, {
+    skipBlurSet: itemRenameSkipBlur,
+    blurKey: itemId,
+    onCommit: () => commitItemNameEdit(itemId),
+    onCancel: () => cancelItemNameEdit(itemId),
   });
 }
 
@@ -809,9 +1199,14 @@ function subscribeMealEditorItems(mealId) {
 
   if (!mealId) {
     state.mealEditorItems = [];
-    renderMealEditorItems();
+    state.editingMealEditorTarget = null;
+    state.pendingMealIngredientRenames = {};
+    renderMealEditor();
     return;
   }
+
+  state.editingMealEditorTarget = null;
+  state.pendingMealIngredientRenames = {};
 
   const itemsQuery = query(
     collection(db, "meals", mealId, "items"),
@@ -823,7 +1218,11 @@ function subscribeMealEditorItems(mealId) {
       id: docSnap.id,
       ...docSnap.data(),
     }));
-    renderMealEditorItems();
+    state.pendingMealIngredientRenames = reconcilePendingItemRenames(
+      state.pendingMealIngredientRenames,
+      state.mealEditorItems,
+    );
+    renderMealEditor();
   });
 }
 
@@ -883,19 +1282,20 @@ function subscribeItems() {
 }
 
 function createMeal(scope) {
+  clearMealEditorEditState();
   state.draftMealScope = scope;
   state.editingMealId = null;
+  state.draftMealTitle = "";
   if (mealEditorItemsUnsub) {
     mealEditorItemsUnsub();
     mealEditorItemsUnsub = null;
   }
   state.mealEditorItems = [];
-  renderMealEditorItems();
-  mealEditorName.value = "";
   setMealEditorMessage("");
   setAppMessage("");
+  renderMealEditor();
   mealEditorDialog.showModal();
-  mealEditorName.focus();
+  void startMealTitleEdit();
 }
 
 function openMealEditor(mealId) {
@@ -903,18 +1303,22 @@ function openMealEditor(mealId) {
   if (!meal) {
     return;
   }
+  clearMealEditorEditState();
   state.draftMealScope = null;
+  state.draftMealTitle = "";
   state.editingMealId = mealId;
-  mealEditorName.value = meal.name;
   setMealEditorMessage("");
   subscribeMealEditorItems(mealId);
+  renderMealEditor();
   mealEditorDialog.showModal();
 }
 
 function closeMealEditor() {
   setMealEditorMessage("");
+  clearMealEditorEditState();
   state.editingMealId = null;
   state.draftMealScope = null;
+  state.draftMealTitle = "";
   if (mealEditorItemsUnsub) {
     mealEditorItemsUnsub();
     mealEditorItemsUnsub = null;
@@ -927,7 +1331,7 @@ async function persistDraftMeal() {
   const result = draftMealPersistResult({
     editingMealId: state.editingMealId,
     draftMealScope: state.draftMealScope,
-    nameInput: mealEditorName.value,
+    nameInput: getMealEditorTitleValue(),
   });
   if (result.status === "already_saved") {
     return result.mealId;
@@ -937,7 +1341,7 @@ async function persistDraftMeal() {
   }
   if (result.status === "blocked") {
     setMealEditorMessage(result.userMessage);
-    mealEditorName.focus();
+    void startMealTitleEdit();
     return null;
   }
   setAppMessage("");
@@ -954,6 +1358,7 @@ async function persistDraftMeal() {
     const ref = await addDoc(collection(db, "meals"), payload);
     state.editingMealId = ref.id;
     state.draftMealScope = null;
+    state.draftMealTitle = "";
     subscribeMealEditorItems(ref.id);
     return ref.id;
   } catch (error) {
@@ -962,52 +1367,13 @@ async function persistDraftMeal() {
   }
 }
 
-async function saveMealEditorName() {
-  const meal = state.editingMealId
-    ? getMealById(state.editingMealId)
-    : null;
-  const action = mealEditorNameBlurAction({
-    editingMealId: state.editingMealId,
-    draftMealScope: state.draftMealScope,
-    nameInput: mealEditorName.value,
-    existingMealName: meal?.name ?? null,
-  });
-
-  if (action.type === "noop") {
-    return;
-  }
-  if (action.type === "persist_draft") {
-    await persistDraftMeal();
-    return;
-  }
-  if (action.type === "reject_empty") {
-    setMealEditorMessage("Meal name cannot be empty.");
-    mealEditorName.value = action.restoreName;
-    return;
-  }
-
-  const mealId = state.editingMealId;
-  if (!mealId || !meal) {
-    return;
-  }
-  setAppMessage("");
-  try {
-    await updateDoc(doc(db, "meals", mealId), {
-      name: action.name,
-      updatedAt: serverTimestamp(),
-    });
-  } catch (error) {
-    setAppMessage(error.message || "Could not rename meal.");
-    mealEditorName.value = meal.name;
-  }
-}
-
 async function addMealIngredient(event) {
   event.preventDefault();
+  await commitActiveMealEditorEdit();
   const attempt = mealIngredientAddAttempt({
     editingMealId: state.editingMealId,
     draftMealScope: state.draftMealScope,
-    mealNameInput: mealEditorName.value,
+    mealNameInput: getMealEditorTitleValue(),
     ingredientInput: inputMealIngredient.value,
     mealEditorItems: state.mealEditorItems,
   });
@@ -1479,8 +1845,25 @@ mealEditorDialog.addEventListener("cancel", (event) => {
   closeMealEditor();
 });
 
-mealEditorName.addEventListener("change", () => {
-  saveMealEditorName();
+mealEditorDialog.addEventListener("pointerdown", (event) => {
+  if (!state.editingMealEditorTarget) {
+    return;
+  }
+  const input = getActiveMealEditorInlineInput();
+  if (!input) {
+    return;
+  }
+  const pointerOnActiveInput =
+    input === event.target || input.contains(event.target);
+  if (
+    !shouldCommitItemNameOnOutsidePointerDown({
+      editingItemId: state.editingMealEditorTarget,
+      pointerOnActiveInput,
+    })
+  ) {
+    return;
+  }
+  void commitActiveMealEditorEdit();
 });
 
 formMealIngredient.addEventListener("submit", addMealIngredient);

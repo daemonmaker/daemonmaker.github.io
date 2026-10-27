@@ -176,16 +176,11 @@
       </dialog>
 
       <dialog id="meal-editor-dialog" class="meal-editor-dialog">
-        <label class="visually-hidden" for="meal-editor-name">Meal name</label>
-        <input
-          id="meal-editor-name"
-          class="meal-editor__name"
-          type="text"
-          name="mealName"
-          autocomplete="off"
-          placeholder="Meal name"
-          required
-        />
+        <div
+          id="meal-editor-name-region"
+          class="meal-editor__name-region"
+          aria-label="Meal name"
+        ></div>
         <p
           id="meal-editor-message"
           class="meal-editor__message message message--error"

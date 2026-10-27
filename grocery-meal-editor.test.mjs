@@ -4,9 +4,13 @@ import {
   parseMealName,
   parseIngredientName,
   ingredientExists,
+  ingredientExistsAmongOthers,
   mealEditorDeleteAction,
   draftMealPersistResult,
   mealEditorNameBlurAction,
+  mealEditorTitleCommitUIEffect,
+  mealIngredientNameCommitAction,
+  mealIngredientNameCommitUIEffect,
   buildMealCreateFields,
   mealIngredientAddAttempt,
 } from "./grocery-meal-editor.mjs";
@@ -132,6 +136,136 @@ describe("draftMealPersistResult", () => {
       }),
       { status: "ready", name: "Chili", scope: "personal" },
     );
+  });
+});
+
+describe("ingredientExistsAmongOthers", () => {
+  const items = [
+    { id: "a", name: "Milk" },
+    { id: "b", name: "Eggs" },
+  ];
+
+  it("returns false when only the excluded row matches", () => {
+    assert.equal(ingredientExistsAmongOthers(items, "milk", "a"), false);
+    assert.equal(ingredientExistsAmongOthers(items, "Milk", "a"), false);
+  });
+
+  it("returns true when another row matches case-insensitively", () => {
+    assert.equal(ingredientExistsAmongOthers(items, "eggs", "a"), true);
+    assert.equal(ingredientExistsAmongOthers(items, "EGGS", "a"), true);
+  });
+});
+
+describe("mealIngredientNameCommitAction", () => {
+  const items = [
+    { id: "a", name: "milk" },
+    { id: "b", name: "Eggs" },
+  ];
+
+  it("allows case-only rename on the same row", () => {
+    assert.deepEqual(
+      mealIngredientNameCommitAction({
+        nameInput: "Milk",
+        existingName: "milk",
+        items,
+        editingItemId: "a",
+      }),
+      { type: "rename", name: "Milk" },
+    );
+  });
+
+  it("rejects duplicate names on other rows", () => {
+    assert.deepEqual(
+      mealIngredientNameCommitAction({
+        nameInput: "eggs",
+        existingName: "milk",
+        items,
+        editingItemId: "a",
+      }),
+      {
+        type: "reject_duplicate",
+        restoreName: "milk",
+        userMessage: "That ingredient is already on this meal.",
+      },
+    );
+  });
+});
+
+describe("mealIngredientNameCommitUIEffect", () => {
+  it("uses ingredient-specific empty message", () => {
+    assert.deepEqual(
+      mealIngredientNameCommitUIEffect({
+        type: "reject_empty",
+        restoreName: "milk",
+      }),
+      {
+        exitEditMode: true,
+        firestoreName: null,
+        userMessage: "Ingredient name cannot be empty.",
+      },
+    );
+  });
+
+  it("handles duplicate rejection without a write", () => {
+    assert.deepEqual(
+      mealIngredientNameCommitUIEffect({
+        type: "reject_duplicate",
+        restoreName: "milk",
+        userMessage: "That ingredient is already on this meal.",
+      }),
+      {
+        exitEditMode: true,
+        firestoreName: null,
+        userMessage: "That ingredient is already on this meal.",
+      },
+    );
+  });
+});
+
+describe("mealEditorTitleCommitUIEffect", () => {
+  it("maps noop to exit edit without writes", () => {
+    assert.deepEqual(mealEditorTitleCommitUIEffect({ type: "noop" }), {
+      exitEditMode: true,
+      mealFirestoreName: null,
+      persistDraft: false,
+      userMessage: null,
+    });
+  });
+
+  it("maps reject_empty with meal message", () => {
+    assert.deepEqual(
+      mealEditorTitleCommitUIEffect({
+        type: "reject_empty",
+        restoreName: "Tacos",
+      }),
+      {
+        exitEditMode: true,
+        mealFirestoreName: null,
+        persistDraft: false,
+        userMessage: "Meal name cannot be empty.",
+      },
+    );
+  });
+
+  it("maps rename to meal Firestore update", () => {
+    assert.deepEqual(
+      mealEditorTitleCommitUIEffect({ type: "rename", name: "Burritos" }),
+      {
+        exitEditMode: true,
+        mealFirestoreName: "Burritos",
+        persistDraft: false,
+        userMessage: null,
+      },
+    );
+  });
+
+  it("maps persist_draft to draft persist flow", () => {
+    assert.deepEqual(mealEditorTitleCommitUIEffect({ type: "persist_draft" }), {
+      exitEditMode: true,
+      mealFirestoreName: null,
+      persistDraft: true,
+      userMessage: null,
+    });
   });
 });
 
