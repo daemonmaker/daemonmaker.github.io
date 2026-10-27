@@ -26,7 +26,7 @@ import {
 
 const firebaseConfig = {
   apiKey: "AIzaSyBrh3SWdqneRJFzCuIwmkGqN_U0UG_YXFE",
-  authDomain: "daemonmaker-grocery.firebaseapp.com",
+  authDomain: "daemonmaker.github.io",
   projectId: "daemonmaker-grocery",
   storageBucket: "daemonmaker-grocery.firebasestorage.app",
   messagingSenderId: "75529110090",
@@ -42,7 +42,7 @@ const viewLogin = document.getElementById("view-login");
 const viewApp = document.getElementById("view-app");
 const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
-const googleSignInButton = document.getElementById("google-signin-button");
+const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
 const listSharedEl = document.getElementById("list-shared");
@@ -89,8 +89,7 @@ function setLoginError(message) {
 }
 
 function setLoginBusy(busy, statusText = "") {
-  googleSignInButton.style.pointerEvents = busy ? "none" : "";
-  googleSignInButton.style.opacity = busy ? "0.6" : "";
+  btnGoogleSignIn.disabled = busy;
   if (statusText) {
     loginStatus.hidden = false;
     loginStatus.textContent = statusText;
@@ -512,60 +511,61 @@ async function removeItem(itemId) {
   await deleteDoc(doc(db, "lists", active.id, "items", itemId));
 }
 
-function whenGoogleIdentityReady(timeoutMs = 15000) {
+function withTimeout(promise, ms, message) {
   return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) {
-      resolve();
-      return;
-    }
-    const started = Date.now();
-    const timer = window.setInterval(() => {
-      if (window.google?.accounts?.id) {
-        window.clearInterval(timer);
-        resolve();
-        return;
-      }
-      if (Date.now() - started >= timeoutMs) {
-        window.clearInterval(timer);
-        reject(new Error("Google Sign-In failed to load."));
-      }
-    }, 50);
+    const timer = window.setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
   });
 }
 
-async function handleGoogleCredential(response) {
+async function signInWithGoogle() {
   setLoginError("");
-  setLoginBusy(true, "Signing in…");
-  try {
-    const credential = GoogleAuthProvider.credential(response.credential);
-    await signInWithCredential(auth, credential);
-  } catch (error) {
-    setLoginBusy(false);
-    setLoginError(error.message || "Sign-in failed.");
-  }
-}
-
-async function initGoogleSignIn() {
-  if (!GOOGLE_OAUTH_CLIENT_ID) {
-    setLoginError("Missing Google client ID in grocery-config.js.");
+  if (!window.IdentityCredential && !navigator.credentials?.get) {
+    setLoginError("This browser cannot sign in with Google from this page.");
     return;
   }
-  await whenGoogleIdentityReady();
-  window.google.accounts.id.initialize({
-    client_id: GOOGLE_OAUTH_CLIENT_ID,
-    callback: handleGoogleCredential,
-    use_fedcm_for_button: true,
-    auto_select: false,
-    cancel_on_tap_outside: true,
-  });
-  window.google.accounts.id.renderButton(googleSignInButton, {
-    type: "standard",
-    theme: "filled_blue",
-    size: "large",
-    text: "signin_with",
-    shape: "rectangular",
-    width: 280,
-  });
+
+  setLoginBusy(true, "Waiting for Google…");
+  try {
+    const identity = await navigator.credentials.get({
+      identity: {
+        context: "signin",
+        providers: [
+          {
+            configURL: "https://accounts.google.com/gsi/fedcm.json",
+            clientId: GOOGLE_OAUTH_CLIENT_ID,
+          },
+        ],
+      },
+    });
+    if (!identity?.token) {
+      throw new Error("Google did not return a sign-in token.");
+    }
+
+    setLoginBusy(true, "Signing in…");
+    const credential = GoogleAuthProvider.credential(identity.token);
+    await withTimeout(
+      signInWithCredential(auth, credential),
+      20000,
+      "Firebase did not finish signing in. Check that daemonmaker.github.io is an authorized domain.",
+    );
+  } catch (error) {
+    setLoginBusy(false);
+    if (error?.name === "NotAllowedError" || error?.name === "AbortError") {
+      setLoginError("Sign-in was canceled.");
+      return;
+    }
+    setLoginError(error.message || "Sign-in failed.");
+  }
 }
 
 async function startSession(user) {
@@ -650,11 +650,9 @@ async function initAuth() {
     }
   });
 
-  try {
-    await initGoogleSignIn();
-  } catch (error) {
-    setLoginError(error.message || "Could not start Google Sign-In.");
-  }
+  btnGoogleSignIn.addEventListener("click", () => {
+    signInWithGoogle();
+  });
 }
 
 initAuth();

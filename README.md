@@ -97,10 +97,9 @@ private to the owner. Only shared lists can be set as the global default.
    [grocery-config.js](grocery-config.js) → **Authorized JavaScript origins**, add
    `https://daemonmaker.github.io`.
 
-Sign-in uses the Google button with FedCM (`use_fedcm_for_button`), then
-Firebase `signInWithCredential`. Full-page OAuth redirects are not used:
-Chrome drops or partitions the return trip on GitHub Pages, which sent you
-back to the login screen.
+Sign-in uses the browser FedCM API (`navigator.credentials.get`) to get a
+Google ID token on this page, then Firebase `signInWithCredential`.
+`authDomain` is `daemonmaker.github.io` so Firebase Auth stays on this origin.
 
 Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
 
