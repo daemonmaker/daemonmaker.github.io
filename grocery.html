@@ -7,6 +7,7 @@
     <meta name="description" content="Shared and personal grocery lists." />
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="grocery.css" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div id="app" class="app">
@@ -19,9 +20,7 @@
             personal lists.
           </p>
           <p id="login-status" class="login__status" hidden></p>
-          <button id="btn-google-sign-in" class="btn btn--primary" type="button">
-            Sign in with Google
-          </button>
+          <div id="google-signin-button"></div>
           <p id="login-oauth-hint" class="login__oauth-hint">
             If sign-in is blocked, add
             <code>https://daemonmaker.github.io</code> under Google Cloud →

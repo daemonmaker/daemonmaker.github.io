@@ -42,7 +42,7 @@ const viewLogin = document.getElementById("view-login");
 const viewApp = document.getElementById("view-app");
 const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
-const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
+const googleSignInButton = document.getElementById("google-signin-button");
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
 const listSharedEl = document.getElementById("list-shared");
@@ -89,7 +89,7 @@ function setLoginError(message) {
 }
 
 function setLoginBusy(busy, statusText = "") {
-  btnGoogleSignIn.disabled = busy;
+  googleSignInButton.style.pointerEvents = busy ? "none" : "";
   if (statusText) {
     loginStatus.hidden = false;
     loginStatus.textContent = statusText;
@@ -527,45 +527,68 @@ function withTimeout(promise, ms, message) {
   });
 }
 
-async function signInWithGoogle() {
+function whenGoogleIdentityReady(timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) {
+      resolve();
+      return;
+    }
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      if (window.google?.accounts?.id) {
+        window.clearInterval(timer);
+        resolve();
+        return;
+      }
+      if (Date.now() - started >= timeoutMs) {
+        window.clearInterval(timer);
+        reject(new Error("Google Sign-In failed to load."));
+      }
+    }, 50);
+  });
+}
+
+async function handleGoogleCredential(response) {
   setLoginError("");
-  if (!window.IdentityCredential && !navigator.credentials?.get) {
-    setLoginError("This browser cannot sign in with Google from this page.");
+  if (!response?.credential) {
+    setLoginError("Google did not return a sign-in token.");
     return;
   }
 
-  setLoginBusy(true, "Waiting for Google…");
+  setLoginBusy(true, "Signing in…");
   try {
-    const identity = await navigator.credentials.get({
-      identity: {
-        context: "signin",
-        providers: [
-          {
-            configURL: "https://accounts.google.com/gsi/fedcm.json",
-            clientId: GOOGLE_OAUTH_CLIENT_ID,
-          },
-        ],
-      },
-    });
-    if (!identity?.token) {
-      throw new Error("Google did not return a sign-in token.");
-    }
-
-    setLoginBusy(true, "Signing in…");
-    const credential = GoogleAuthProvider.credential(identity.token);
+    const credential = GoogleAuthProvider.credential(response.credential);
     await withTimeout(
       signInWithCredential(auth, credential),
       20000,
       "Firebase did not finish signing in. Check that daemonmaker.github.io is an authorized domain.",
     );
   } catch (error) {
-    setLoginBusy(false);
-    if (error?.name === "NotAllowedError" || error?.name === "AbortError") {
-      setLoginError("Sign-in was canceled.");
-      return;
-    }
     setLoginError(error.message || "Sign-in failed.");
+  } finally {
+    setLoginBusy(false);
   }
+}
+
+async function initGoogleSignIn() {
+  await whenGoogleIdentityReady();
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_OAUTH_CLIENT_ID,
+    callback: (response) => {
+      handleGoogleCredential(response);
+    },
+    use_fedcm_for_button: true,
+    auto_select: false,
+    itp_support: true,
+  });
+  window.google.accounts.id.renderButton(googleSignInButton, {
+    type: "standard",
+    theme: "filled_blue",
+    size: "large",
+    text: "signin_with",
+    shape: "rectangular",
+    width: 280,
+  });
 }
 
 async function startSession(user) {
@@ -650,9 +673,11 @@ async function initAuth() {
     }
   });
 
-  btnGoogleSignIn.addEventListener("click", () => {
-    signInWithGoogle();
-  });
+  try {
+    await initGoogleSignIn();
+  } catch (error) {
+    setLoginError(error.message || "Could not start Google Sign-In.");
+  }
 }
 
 initAuth();
