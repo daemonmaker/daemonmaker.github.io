@@ -3,10 +3,9 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithCredential,
+  signInWithPopup,
   signOut,
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { GOOGLE_OAUTH_CLIENT_ID } from "./grocery-config.js";
 import {
   getFirestore,
   collection,
@@ -42,7 +41,8 @@ const viewLogin = document.getElementById("view-login");
 const viewApp = document.getElementById("view-app");
 const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
-const googleSignInButton = document.getElementById("google-signin-button");
+const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
+const googleProvider = new GoogleAuthProvider();
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
 const listSharedEl = document.getElementById("list-shared");
@@ -89,7 +89,7 @@ function setLoginError(message) {
 }
 
 function setLoginBusy(busy, statusText = "") {
-  googleSignInButton.style.pointerEvents = busy ? "none" : "";
+  btnGoogleSignIn.disabled = busy;
   if (statusText) {
     loginStatus.hidden = false;
     loginStatus.textContent = statusText;
@@ -511,84 +511,17 @@ async function removeItem(itemId) {
   await deleteDoc(doc(db, "lists", active.id, "items", itemId));
 }
 
-function withTimeout(promise, ms, message) {
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(message)), ms);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
-function whenGoogleIdentityReady(timeoutMs = 15000) {
-  return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) {
-      resolve();
-      return;
-    }
-    const started = Date.now();
-    const timer = window.setInterval(() => {
-      if (window.google?.accounts?.id) {
-        window.clearInterval(timer);
-        resolve();
-        return;
-      }
-      if (Date.now() - started >= timeoutMs) {
-        window.clearInterval(timer);
-        reject(new Error("Google Sign-In failed to load."));
-      }
-    }, 50);
-  });
-}
-
-async function handleGoogleCredential(response) {
+async function signInWithGoogle() {
   setLoginError("");
-  if (!response?.credential) {
-    setLoginError("Google did not return a sign-in token.");
-    return;
-  }
-
-  setLoginBusy(true, "Signing in…");
+  setLoginBusy(true, "Opening Google…");
   try {
-    const credential = GoogleAuthProvider.credential(response.credential);
-    await withTimeout(
-      signInWithCredential(auth, credential),
-      20000,
-      "Firebase did not finish signing in. Check that daemonmaker.github.io is an authorized domain.",
-    );
+    await signInWithPopup(auth, googleProvider);
   } catch (error) {
-    setLoginError(error.message || "Sign-in failed.");
+    const code = error?.code ? `${error.code}: ` : "";
+    setLoginError(`${code}${error.message || "Sign-in failed."}`);
   } finally {
     setLoginBusy(false);
   }
-}
-
-async function initGoogleSignIn() {
-  await whenGoogleIdentityReady();
-  window.google.accounts.id.initialize({
-    client_id: GOOGLE_OAUTH_CLIENT_ID,
-    callback: (response) => {
-      handleGoogleCredential(response);
-    },
-    use_fedcm_for_button: true,
-    auto_select: false,
-    itp_support: true,
-  });
-  window.google.accounts.id.renderButton(googleSignInButton, {
-    type: "standard",
-    theme: "filled_blue",
-    size: "large",
-    text: "signin_with",
-    shape: "rectangular",
-    width: 280,
-  });
 }
 
 async function startSession(user) {
@@ -673,11 +606,9 @@ async function initAuth() {
     }
   });
 
-  try {
-    await initGoogleSignIn();
-  } catch (error) {
-    setLoginError(error.message || "Could not start Google Sign-In.");
-  }
+  btnGoogleSignIn.addEventListener("click", () => {
+    signInWithGoogle();
+  });
 }
 
 initAuth();
