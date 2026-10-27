@@ -97,11 +97,10 @@ private to the owner. Only shared lists can be set as the global default.
    [grocery-config.js](grocery-config.js) → **Authorized JavaScript origins**, add
    `https://daemonmaker.github.io`.
 
-Sign-in uses Firebase `signInWithPopup` with `authDomain` set to
-`daemonmaker.github.io`, so the auth helper at `/__/auth/handler/` is on this
-site. Google Cloud authorized redirect URIs must include
-`https://daemonmaker.github.io/__/auth/handler/` and
-`https://daemonmaker.github.io/__/auth/handler`.
+Sign-in uses Google's token client in redirect mode (no Firebase popup).
+Chrome's cross-origin policy blocks Firebase from closing that popup, which
+is the `popup.ts` `window.close` console warning. The redirect URI must be
+`https://daemonmaker.github.io/grocery.html`.
 
 Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
 

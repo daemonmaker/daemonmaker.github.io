@@ -3,9 +3,13 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithPopup,
+  signInWithCredential,
   signOut,
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import {
+  GOOGLE_OAUTH_CLIENT_ID,
+  GOOGLE_OAUTH_REDIRECT_URI,
+} from "./grocery-config.js";
 import {
   getFirestore,
   collection,
@@ -42,7 +46,7 @@ const viewApp = document.getElementById("view-app");
 const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
 const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
-const googleProvider = new GoogleAuthProvider();
+let tokenClient = null;
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
 const listSharedEl = document.getElementById("list-shared");
@@ -511,17 +515,82 @@ async function removeItem(itemId) {
   await deleteDoc(doc(db, "lists", active.id, "items", itemId));
 }
 
-async function signInWithGoogle() {
-  setLoginError("");
-  setLoginBusy(true, "Opening Google…");
+function oauthRedirectUri() {
+  if (window.location.hostname === "localhost") {
+    return `${window.location.origin}${window.location.pathname}`;
+  }
+  return GOOGLE_OAUTH_REDIRECT_URI;
+}
+
+function whenGoogleReady(timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts?.oauth2) {
+      resolve();
+      return;
+    }
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      if (window.google?.accounts?.oauth2) {
+        window.clearInterval(timer);
+        resolve();
+        return;
+      }
+      if (Date.now() - started >= timeoutMs) {
+        window.clearInterval(timer);
+        reject(new Error("Google Sign-In failed to load."));
+      }
+    }, 50);
+  });
+}
+
+async function handleTokenResponse(response) {
+  if (response.error) {
+    setLoginBusy(false);
+    setLoginError(response.error_description || response.error);
+    return;
+  }
+  if (!response.access_token) {
+    setLoginBusy(false);
+    setLoginError("Google did not return a sign-in token.");
+    return;
+  }
+
+  setLoginBusy(true, "Signing in…");
   try {
-    await signInWithPopup(auth, googleProvider);
+    const credential = GoogleAuthProvider.credential(null, response.access_token);
+    await signInWithCredential(auth, credential);
   } catch (error) {
-    const code = error?.code ? `${error.code}: ` : "";
-    setLoginError(`${code}${error.message || "Sign-in failed."}`);
+    setLoginError(error.message || "Sign-in failed.");
   } finally {
     setLoginBusy(false);
   }
+}
+
+async function initGoogleSignIn() {
+  await whenGoogleReady();
+  tokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_OAUTH_CLIENT_ID,
+    scope: "openid email profile",
+    ux_mode: "redirect",
+    redirect_uri: oauthRedirectUri(),
+    callback: (response) => {
+      handleTokenResponse(response);
+    },
+    error_callback: (error) => {
+      setLoginBusy(false);
+      setLoginError(error.message || error.type || "Sign-in failed.");
+    },
+  });
+}
+
+function signInWithGoogle() {
+  setLoginError("");
+  if (!tokenClient) {
+    setLoginError("Google Sign-In is not ready yet.");
+    return;
+  }
+  setLoginBusy(true, "Redirecting to Google…");
+  tokenClient.requestAccessToken();
 }
 
 async function startSession(user) {
@@ -609,6 +678,11 @@ async function initAuth() {
   btnGoogleSignIn.addEventListener("click", () => {
     signInWithGoogle();
   });
+  try {
+    await initGoogleSignIn();
+  } catch (error) {
+    setLoginError(error.message || "Could not start Google Sign-In.");
+  }
 }
 
 initAuth();
