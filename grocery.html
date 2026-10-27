@@ -22,6 +22,12 @@
           <button id="btn-google-sign-in" class="btn btn--primary" type="button">
             Sign in with Google
           </button>
+          <p id="login-oauth-hint" class="login__oauth-hint">
+            If Google shows <strong>redirect_uri_mismatch</strong>, add
+            <code>https://daemonmaker.github.io/__/auth/handler/</code> (with trailing
+            slash) to Google Cloud → Credentials → Web client → Authorized redirect
+            URIs.
+          </p>
           <p id="login-error" class="message message--error" hidden></p>
         </div>
       </section>

@@ -94,12 +94,18 @@ private to the owner. Only shared lists can be set as the global default.
    `lists` on `scope` + `ownerUid` (see [firestore.indexes.json](firestore.indexes.json)).
 6. **Google OAuth redirect URI** — in [Google Cloud Console](https://console.cloud.google.com/apis/credentials?project=daemonmaker-grocery)
    → **Credentials** → OAuth 2.0 Client IDs → **Web client (auto created by Google Service)** →
-   **Authorized redirect URIs**, add:
+   **Authorized redirect URIs**, add **both** forms (GitHub Pages uses a trailing
+   slash; Google’s error details show the slash form):
+   - `https://daemonmaker.github.io/__/auth/handler/`
    - `https://daemonmaker.github.io/__/auth/handler`
-   - `http://localhost:8000/__/auth/handler` (local preview; match your port)
+   - `http://localhost:8000/__/auth/handler/` and without slash (local preview)
 
    Also ensure **Authorized JavaScript origins** include `https://daemonmaker.github.io`
    and `http://localhost`.
+
+   If you open [__/auth/handler/](https://daemonmaker.github.io/__/auth/handler/)
+   directly and see “missing initial state”, that is normal — start sign-in from
+   [grocery.html](https://daemonmaker.github.io/grocery.html) instead.
 
 Sign-in uses Firebase **`signInWithRedirect`** with `authDomain:
 daemonmaker.github.io` and self-hosted [`__/auth/`](__/auth/) helpers in this
