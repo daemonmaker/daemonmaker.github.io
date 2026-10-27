@@ -10,8 +10,9 @@ Plain static files. No build step, no generator, no framework.
 - `index.html`
 - `style.css`
 - `assets/headshot.jpg`
-- `grocery.html`, `grocery.css`, `grocery.js` — shared grocery lists (Firebase)
-- `__/auth/*`, `__/firebase/init.json` — Firebase Auth helpers (same-origin sign-in on GitHub Pages)
+- `grocery.html`, `grocery.css`, `grocery.js`, `grocery-config.js` — unlisted grocery lists (Firebase)
+- `firestore.rules`, `firestore.indexes.json` — rules and index source; publish rules in the Firebase console
+- `__/auth/*`, `__/firebase/init.json` — unused Firebase Auth handler copies, not the sign-in path
 
 ## Local preview
 
@@ -77,7 +78,8 @@ Firestore project `daemonmaker-grocery`.
 - **`lists/{listId}`** — `name`, `scope` (`shared` | `personal`), `ownerUid`
   (personal only), timestamps. Bootstrap shared list id: `shared-grocery`
   (name “Grocery”).
-- **`lists/{listId}/items/{itemId}`** — `name`, `createdAt`.
+- **`lists/{listId}/items/{itemId}`** — `name`, `createdAt`. Items are added
+  and removed; there is no check-off.
 
 Shared lists are visible and editable by any signed-in user. Personal lists are
 private to the owner. Only shared lists can be set as the global default.
@@ -89,26 +91,26 @@ private to the owner. Only shared lists can be set as the global default.
 3. **Authentication → Settings → Authorized domains** — add `daemonmaker.github.io`
    and `localhost`.
 4. **Firestore → Rules** — copy from [firestore.rules](firestore.rules) and
-   publish.
+   publish. Git does not deploy these rules. A `get` of a list that does not
+   exist yet must stay allowed, or the first sign-in cannot create
+   `shared-grocery`.
 5. **Firestore → Indexes** — if prompted, create the composite index for
    `lists` on `scope` + `ownerUid` (see [firestore.indexes.json](firestore.indexes.json)).
-6. **Authorized JavaScript origins** — in [Google Cloud Console](https://console.cloud.google.com/apis/credentials?project=daemonmaker-grocery)
+6. **Authorized redirect URIs** — in [Google Cloud Console](https://console.cloud.google.com/apis/credentials?project=daemonmaker-grocery)
    → **Credentials** → the Web client whose ID matches
-   [grocery-config.js](grocery-config.js) → **Authorized JavaScript origins**, add
-   `https://daemonmaker.github.io`.
+   [grocery-config.js](grocery-config.js). Add these exactly, with no trailing
+   slash:
 
-Sign-in uses Google's token client in redirect mode (no Firebase popup).
-Chrome's cross-origin policy blocks Firebase from closing that popup, which
-is the `popup.ts` `window.close` console warning. The redirect URI must be
-`https://daemonmaker.github.io/grocery.html`.
+   - `https://daemonmaker.github.io/grocery.html`
+   - `http://localhost:8000/grocery.html`
 
-Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
+Sign-in is a full-page redirect to Google. The page returns with an `id_token`
+and `access_token` in the URL hash, and `grocery.js` signs in with
+`signInWithCredential`. Firebase popups and `signInWithRedirect` do not finish
+on GitHub Pages, and the OAuth client secret must not be committed. `authDomain`
+stays `daemonmaker-grocery.firebaseapp.com`.
 
-To refresh Firebase auth helper files from the project (rare):
-
-```bash
-base="https://daemonmaker-grocery.firebaseapp.com/__/auth"
-for f in handler handler.js iframe iframe.js experiments.js links links.js; do
-  curl -sO "$base/$f" -o "__/auth/$f"
-done
-```
+Local preview: `python3 -m http.server 8000`, then open
+`http://localhost:8000/grocery.html`. Use `localhost`, not `127.0.0.1`. The
+port is part of the redirect URI, so a different port will not match the URI
+registered above.
