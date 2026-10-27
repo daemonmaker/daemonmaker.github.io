@@ -683,6 +683,10 @@ async function initAuth() {
     }
   });
 
+  const hint = document.getElementById("login-oauth-hint");
+  if (hint) {
+    hint.textContent = `Authorized redirect URI: ${oauthRedirectUri()}`;
+  }
   btnGoogleSignIn.addEventListener("click", () => {
     signInWithGoogle();
   });
