@@ -3,10 +3,13 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithCredential,
   signOut,
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import {
+  GOOGLE_OAUTH_CLIENT_ID,
+  GOOGLE_OAUTH_REDIRECT_URI,
+} from "./grocery-config.js";
 import {
   getFirestore,
   collection,
@@ -26,7 +29,7 @@ import {
 
 const firebaseConfig = {
   apiKey: "AIzaSyBrh3SWdqneRJFzCuIwmkGqN_U0UG_YXFE",
-  authDomain: "daemonmaker.github.io",
+  authDomain: "daemonmaker-grocery.firebaseapp.com",
   projectId: "daemonmaker-grocery",
   storageBucket: "daemonmaker-grocery.firebasestorage.app",
   messagingSenderId: "75529110090",
@@ -511,13 +514,105 @@ async function removeItem(itemId) {
   await deleteDoc(doc(db, "lists", active.id, "items", itemId));
 }
 
-const googleProvider = new GoogleAuthProvider();
+const PKCE_VERIFIER_KEY = "grocery_google_pkce_verifier";
+const PKCE_REDIRECT_KEY = "grocery_google_redirect_uri";
 
-async function signInWithGoogle() {
+function getOAuthRedirectUri() {
+  if (window.location.hostname === "localhost") {
+    return `${window.location.origin}${window.location.pathname}`;
+  }
+  return GOOGLE_OAUTH_REDIRECT_URI;
+}
+
+function base64UrlEncode(bytes) {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/u, "");
+}
+
+async function startGoogleOAuthRedirect() {
   setLoginError("");
   setLoginBusy(true, "Redirecting to Google…");
+
+  const redirectUri = getOAuthRedirectUri();
+  const verifierBytes = new Uint8Array(32);
+  crypto.getRandomValues(verifierBytes);
+  const verifier = base64UrlEncode(verifierBytes);
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier),
+  );
+  const challenge = base64UrlEncode(new Uint8Array(digest));
+
+  localStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+  localStorage.setItem(PKCE_REDIRECT_KEY, redirectUri);
+
+  const params = new URLSearchParams({
+    client_id: GOOGLE_OAUTH_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: "openid email profile",
+    prompt: "select_account",
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+  });
+  window.location.assign(
+    `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+  );
+}
+
+async function completeGoogleOAuthFromQuery() {
+  const query = new URLSearchParams(window.location.search);
+  const oauthError = query.get("error");
+  const code = query.get("code");
+  if (!oauthError && !code) {
+    return;
+  }
+
+  history.replaceState(null, "", window.location.pathname);
+
+  if (oauthError) {
+    setLoginError(query.get("error_description") || oauthError);
+    return;
+  }
+
+  const verifier = localStorage.getItem(PKCE_VERIFIER_KEY);
+  const redirectUri =
+    localStorage.getItem(PKCE_REDIRECT_KEY) || getOAuthRedirectUri();
+  localStorage.removeItem(PKCE_VERIFIER_KEY);
+  localStorage.removeItem(PKCE_REDIRECT_KEY);
+
+  if (!verifier) {
+    setLoginError("Sign-in could not be finished. Please try again.");
+    return;
+  }
+
+  setLoginBusy(true, "Signing in…");
   try {
-    await signInWithRedirect(auth, googleProvider);
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: GOOGLE_OAUTH_CLIENT_ID,
+        code,
+        code_verifier: verifier,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+    const tokenJson = await tokenRes.json();
+    if (!tokenRes.ok) {
+      throw new Error(
+        tokenJson.error_description || tokenJson.error || "Token exchange failed.",
+      );
+    }
+    const credential = GoogleAuthProvider.credential(
+      tokenJson.id_token || null,
+      tokenJson.access_token || null,
+    );
+    await signInWithCredential(auth, credential);
   } catch (error) {
     setLoginBusy(false);
     setLoginError(error.message || "Sign-in failed.");
@@ -596,14 +691,6 @@ formAddItem.addEventListener("submit", addItem);
 
 async function initAuth() {
   showLogin();
-  setLoginBusy(true, "Checking sign-in…");
-
-  try {
-    await getRedirectResult(auth);
-  } catch (error) {
-    setLoginBusy(false);
-    setLoginError(error.message || "Sign-in failed.");
-  }
 
   onAuthStateChanged(auth, (user) => {
     setLoginBusy(false);
@@ -614,7 +701,10 @@ async function initAuth() {
     }
   });
 
-  btnGoogleSignIn.addEventListener("click", signInWithGoogle);
+  btnGoogleSignIn.addEventListener("click", () => {
+    startGoogleOAuthRedirect();
+  });
+  await completeGoogleOAuthFromQuery();
 }
 
 initAuth();

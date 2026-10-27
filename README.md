@@ -93,23 +93,17 @@ private to the owner. Only shared lists can be set as the global default.
 5. **Firestore → Indexes** — if prompted, create the composite index for
    `lists` on `scope` + `ownerUid` (see [firestore.indexes.json](firestore.indexes.json)).
 6. **Google OAuth redirect URI** — in [Google Cloud Console](https://console.cloud.google.com/apis/credentials?project=daemonmaker-grocery)
-   → **Credentials** → OAuth 2.0 Client IDs → **Web client (auto created by Google Service)** →
-   **Authorized redirect URIs**, add **both** forms (GitHub Pages uses a trailing
-   slash; Google’s error details show the slash form):
-   - `https://daemonmaker.github.io/__/auth/handler/`
-   - `https://daemonmaker.github.io/__/auth/handler`
-   - `http://localhost:8000/__/auth/handler/` and without slash (local preview)
+   → **Credentials** → the Web client whose ID matches
+   [grocery-config.js](grocery-config.js) → **Authorized redirect URIs**, add:
+   - `https://daemonmaker.github.io/grocery.html`
 
-   Also ensure **Authorized JavaScript origins** include `https://daemonmaker.github.io`
-   and `http://localhost`.
+   Also ensure **Authorized JavaScript origins** include `https://daemonmaker.github.io`.
 
-   If you open [__/auth/handler/](https://daemonmaker.github.io/__/auth/handler/)
-   directly and see “missing initial state”, that is normal — start sign-in from
-   [grocery.html](https://daemonmaker.github.io/grocery.html) instead.
-
-Sign-in uses Firebase **`signInWithRedirect`** with `authDomain:
-daemonmaker.github.io` and self-hosted [`__/auth/`](__/auth/) helpers in this
-repo (see [Firebase redirect best practices](https://firebase.google.com/docs/auth/web/redirect-best-practices)).
+Sign-in is a full-page Google OAuth redirect back to `grocery.html`, then
+Firebase `signInWithCredential`. The PKCE verifier is stored in `localStorage`
+so it survives the round trip. Firebase’s `__/auth/handler` path is not used:
+on GitHub Pages that handler loses its `sessionStorage` pending state and
+sends you back to the login screen.
 
 Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
 
