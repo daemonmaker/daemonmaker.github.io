@@ -95,13 +95,17 @@ private to the owner. Only shared lists can be set as the global default.
    → Authentication → Sign-in method → Google → Web SDK configuration. Paste
    it into [grocery-config.js](grocery-config.js) as `GOOGLE_OAUTH_CLIENT_ID`
    (public value, safe to commit). In [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-   → Credentials → that Web client → **Authorized JavaScript origins**, ensure
-   `https://daemonmaker.github.io` and `http://localhost` are listed.
+   → Credentials → that Web client:
+   - **Authorized JavaScript origins:** `https://daemonmaker.github.io`,
+     `http://localhost`
+   - **Authorized redirect URIs:** `https://daemonmaker.github.io/grocery.html`,
+     `http://localhost:8000/grocery.html` (adjust port if needed)
 
 Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
 
 **Why not Firebase popup/redirect?** GitHub Pages cannot host Firebase’s
 `__/auth/*` helpers, and browsers block the cross-site storage handoff between
-`github.io` and `firebaseapp.com`. Sign-in uses **Google Identity Services** plus
-Firebase `signInWithCredential`, which completes entirely on your page origin.
+`github.io` and `firebaseapp.com`. Sign-in uses a **full-page Google OAuth
+redirect** (token in URL hash) plus Firebase `signInWithCredential` — no popup or
+`postMessage`, so Chrome COOP warnings from the GIS button are avoided.
 See [Firebase redirect best practices](https://firebase.google.com/docs/auth/web/redirect-best-practices).
