@@ -99,11 +99,9 @@ private to the owner. Only shared lists can be set as the global default.
 
    Also ensure **Authorized JavaScript origins** include `https://daemonmaker.github.io`.
 
-Sign-in is a full-page Google OAuth redirect back to `grocery.html`, then
-Firebase `signInWithCredential`. The PKCE verifier is stored in `localStorage`
-so it survives the round trip. Firebase’s `__/auth/handler` path is not used:
-on GitHub Pages that handler loses its `sessionStorage` pending state and
-sends you back to the login screen.
+Sign-in is a full-page Google redirect back to `grocery.html`. Google returns
+an ID token in the URL hash (no client secret), and the page signs in to
+Firebase with `signInWithCredential`.
 
 Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
 
