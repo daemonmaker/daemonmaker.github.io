@@ -11,6 +11,7 @@ Plain static files. No build step, no generator, no framework.
 - `style.css`
 - `assets/headshot.jpg`
 - `grocery.html`, `grocery.css`, `grocery.js` — shared grocery lists (Firebase)
+- `__/auth/*`, `__/firebase/init.json` — Firebase Auth helpers (same-origin sign-in on GitHub Pages)
 
 ## Local preview
 
@@ -91,28 +92,26 @@ private to the owner. Only shared lists can be set as the global default.
    publish.
 5. **Firestore → Indexes** — if prompted, create the composite index for
    `lists` on `scope` + `ownerUid` (see [firestore.indexes.json](firestore.indexes.json)).
-6. **Google OAuth client ID** — copy the **Web client ID** from Firebase Console
-   → Authentication → Sign-in method → Google → Web SDK configuration. Paste
-   it into [grocery-config.js](grocery-config.js) as `GOOGLE_OAUTH_CLIENT_ID`
-   (public value, safe to commit). In [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-   → **Credentials** → OAuth 2.0 Client IDs → open the client whose ID matches
-   `GOOGLE_OAUTH_CLIENT_ID` in [grocery-config.js](grocery-config.js) (same
-   project: **daemonmaker-grocery**, project number `75529110090`). This is
-   **not** the same field as Firebase “Authorized domains”.
-   - **Authorized JavaScript origins** (no path): `https://daemonmaker.github.io`,
-     `http://localhost`
-   - **Authorized redirect URIs** (must match [grocery-config.js](grocery-config.js)
-     `GOOGLE_OAUTH_REDIRECT_URI` exactly): `https://daemonmaker.github.io/` and
-     `http://localhost:8000/` for local preview
-   - If you still see **redirect_uri_mismatch**, click Google’s “error details”
-     and compare its `redirect_uri=` value character-for-character with the
-     redirect URI list above (trailing slash matters).
+6. **Google OAuth redirect URI** — in [Google Cloud Console](https://console.cloud.google.com/apis/credentials?project=daemonmaker-grocery)
+   → **Credentials** → OAuth 2.0 Client IDs → **Web client (auto created by Google Service)** →
+   **Authorized redirect URIs**, add:
+   - `https://daemonmaker.github.io/__/auth/handler`
+   - `http://localhost:8000/__/auth/handler` (local preview; match your port)
+
+   Also ensure **Authorized JavaScript origins** include `https://daemonmaker.github.io`
+   and `http://localhost`.
+
+Sign-in uses Firebase **`signInWithRedirect`** with `authDomain:
+daemonmaker.github.io` and self-hosted [`__/auth/`](__/auth/) helpers in this
+repo (see [Firebase redirect best practices](https://firebase.google.com/docs/auth/web/redirect-best-practices)).
 
 Local preview: `python3 -m http.server 8000` then open `/grocery.html`.
 
-**Why not Firebase popup/redirect?** GitHub Pages cannot host Firebase’s
-`__/auth/*` helpers, and browsers block the cross-site storage handoff between
-`github.io` and `firebaseapp.com`. Sign-in uses a **full-page Google OAuth
-redirect** (token in URL hash) plus Firebase `signInWithCredential` — no popup or
-`postMessage`, so Chrome COOP warnings from the GIS button are avoided.
-See [Firebase redirect best practices](https://firebase.google.com/docs/auth/web/redirect-best-practices).
+To refresh Firebase auth helper files from the project (rare):
+
+```bash
+base="https://daemonmaker-grocery.firebaseapp.com/__/auth"
+for f in handler handler.js iframe iframe.js experiments.js links links.js; do
+  curl -sO "$base/$f" -o "__/auth/$f"
+done
+```
