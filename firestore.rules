@@ -83,10 +83,18 @@ service cloud.firestore {
           && canAccessList(listId)
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
-          && request.resource.data.checked is bool
           && (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked'])
-            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+            (
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked'])
+              && request.resource.data.checked is bool
+            )
+            || (
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+              && (
+                !('checked' in request.resource.data)
+                || request.resource.data.checked is bool
+              )
+            )
           );
       }
     }
