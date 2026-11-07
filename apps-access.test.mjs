@@ -9,6 +9,7 @@ import {
   bindUidWrite,
   inviteUpsertFields,
   appsLauncherLinks,
+  userMenuAppLinks,
   adminRosterSort,
   accessDocIdForEmail,
   userCoinLetter,
@@ -95,6 +96,16 @@ describe("isAdminUser", () => {
       false,
     );
   });
+
+  it("returns false when adminConfig is missing", () => {
+    assert.equal(
+      isAdminUser(
+        { email: "guest@example.com", uid: "g1" },
+        { seedEmails: [], adminConfig: null },
+      ),
+      false,
+    );
+  });
 });
 
 describe("sessionView", () => {
@@ -132,6 +143,13 @@ describe("sessionView", () => {
 });
 
 describe("bindUidWrite", () => {
+  it("errors when access doc is missing", () => {
+    assert.deepEqual(bindUidWrite({ accessDoc: null, uid: "u1" }), {
+      ok: false,
+      error: "No access record.",
+    });
+  });
+
   it("patches when uid empty", () => {
     assert.deepEqual(bindUidWrite({ accessDoc: { uid: null }, uid: "u1" }), {
       ok: true,
@@ -177,6 +195,26 @@ describe("appsLauncherLinks", () => {
       { id: "habits", href: "habits.html", title: "Habits" },
     ]);
   });
+
+  it("returns empty when nothing is granted", () => {
+    assert.deepEqual(appsLauncherLinks(null), []);
+    assert.deepEqual(appsLauncherLinks({ apps: [] }), []);
+  });
+});
+
+describe("userMenuAppLinks", () => {
+  it("appends the Micro Apps portal after granted apps", () => {
+    assert.deepEqual(userMenuAppLinks({ apps: ["habits"] }), [
+      { id: "habits", href: "habits.html", title: "Habits" },
+      { id: "portal", href: "apps.html", title: "Micro Apps" },
+    ]);
+  });
+
+  it("still includes the portal when no apps are granted", () => {
+    assert.deepEqual(userMenuAppLinks({ apps: [] }), [
+      { id: "portal", href: "apps.html", title: "Micro Apps" },
+    ]);
+  });
 });
 
 describe("adminRosterSort", () => {
@@ -200,6 +238,11 @@ describe("accessDocIdForEmail", () => {
 describe("userCoinLetter", () => {
   it("uses display name first character", () => {
     assert.equal(userCoinLetter({ displayName: "Ada", email: "a@b.com" }), "A");
+  });
+
+  it("falls back to email then question mark", () => {
+    assert.equal(userCoinLetter({ email: "bob@example.com" }), "B");
+    assert.equal(userCoinLetter({}), "?");
   });
 });
 

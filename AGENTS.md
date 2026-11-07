@@ -171,7 +171,7 @@ Open `http://localhost:8000/grocery.html`, `http://localhost:8000/habits.html`, 
 Pure helper tests:
 
 ```bash
-node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs
+node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs grocery-prefs.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs
 ```
 
 After access or habits rule changes, copy `firestore.rules` into the Firebase console and publish (same as grocery).

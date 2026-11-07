@@ -14,6 +14,7 @@ import {
 import {
   isChecked,
   sortItems,
+  parseSortDir,
   itemNameCommitAction,
   itemNameCommitUIEffect,
   itemNameDisplayAfterCommit,
@@ -21,6 +22,7 @@ import {
   itemNameForDisplay,
   reconcilePendingItemRenames,
 } from "./grocery-items.mjs";
+import { parseSidebarTab, parseItemSort } from "./grocery-prefs.mjs";
 import { matchMealItems, itemsToAdd } from "./grocery-meals.mjs";
 import {
   mealEditorDeleteAction,
@@ -39,6 +41,7 @@ import {
   bindUidWrite,
   userCoinLetter,
   parseThemePref,
+  userMenuAppLinks,
 } from "./apps-access.mjs";
 import {
   getFirestore,
@@ -89,6 +92,7 @@ const userLabel = document.getElementById("user-label");
 const userCoinInitial = document.getElementById("user-coin-initial");
 const btnUserMenu = document.getElementById("btn-user-menu");
 const userMenuPanel = document.getElementById("user-menu-panel");
+const userMenuApps = document.getElementById("user-menu-apps");
 const themeRadios = document.querySelectorAll('input[name="grocery-theme"]');
 const loginThemeButtons = document.querySelectorAll("[data-grocery-theme-pick]");
 const sidebarTabButtons = document.querySelectorAll("[data-sidebar-tab]");
@@ -107,6 +111,9 @@ const btnDeleteList = document.getElementById("btn-delete-list");
 const formAddItem = document.getElementById("form-add-item");
 const inputItem = document.getElementById("input-item");
 const itemSortRadios = document.querySelectorAll('input[name="item-sort"]');
+const itemSortDirRadios = document.querySelectorAll(
+  'input[name="item-sort-dir"]',
+);
 const listMealsSharedEl = document.getElementById("list-meals-shared");
 const listMealsPersonalEl = document.getElementById("list-meals-personal");
 const ITEMS_SWIPE_WIDTH_PX = 52;
@@ -139,6 +146,7 @@ const state = {
   editingListName: false,
   pendingListName: null,
   itemSort: "name",
+  itemSortDir: "asc",
   openSwipeItemId: null,
   ready: false,
   mealDialogMealId: null,
@@ -188,10 +196,6 @@ function setThemeFromUI(mode) {
   syncThemeRadios();
 }
 
-function parseSidebarTab(value) {
-  return value === "meals" ? "meals" : "grocery";
-}
-
 function readCookie(name) {
   const prefix = `${encodeURIComponent(name)}=`;
   const parts = document.cookie ? document.cookie.split("; ") : [];
@@ -232,6 +236,23 @@ function closeUserMenu() {
   }
   userMenuPanel.hidden = true;
   btnUserMenu?.setAttribute("aria-expanded", "false");
+}
+
+function renderUserMenuApps(accessDoc, currentAppId) {
+  if (!userMenuApps) {
+    return;
+  }
+  userMenuApps.replaceChildren();
+  for (const link of userMenuAppLinks(accessDoc)) {
+    const anchor = document.createElement("a");
+    anchor.href = link.href;
+    anchor.className = "user-menu__link";
+    anchor.textContent = link.title;
+    if (link.id === currentAppId) {
+      anchor.setAttribute("aria-current", "page");
+    }
+    userMenuApps.appendChild(anchor);
+  }
 }
 
 function closeListMenu() {
@@ -1743,7 +1764,7 @@ function renderItems() {
     }
   }
 
-  const sorted = sortItems(state.items, state.itemSort);
+  const sorted = sortItems(state.items, state.itemSort, state.itemSortDir);
   const nextIds = new Set();
 
   for (const item of sorted) {
@@ -1909,6 +1930,9 @@ function renderListTitle() {
     for (const radio of itemSortRadios) {
       radio.disabled = true;
     }
+    for (const radio of itemSortDirRadios) {
+      radio.disabled = true;
+    }
     return;
   }
 
@@ -1926,6 +1950,9 @@ function renderListTitle() {
   formAddItem.querySelector("button").disabled = false;
   inputItem.disabled = false;
   for (const radio of itemSortRadios) {
+    radio.disabled = false;
+  }
+  for (const radio of itemSortDirRadios) {
     radio.disabled = false;
   }
 
@@ -2663,6 +2690,7 @@ async function startSession(user) {
       return;
     }
 
+    renderUserMenuApps(accessDoc, "grocery");
     showApp();
     await ensureBootstrap();
     subscribeConfig();
@@ -2701,6 +2729,7 @@ function endSession() {
   clearListNameEdit();
   closeAllMenus();
   state.openSwipeItemId = null;
+  userMenuApps?.replaceChildren();
   state.mealDialogMealId = null;
   state.mealDialogMealItems = [];
   state.editingMealId = null;
@@ -2839,6 +2868,9 @@ function syncItemSortRadios() {
   for (const radio of itemSortRadios) {
     radio.checked = radio.value === state.itemSort;
   }
+  for (const radio of itemSortDirRadios) {
+    radio.checked = radio.value === state.itemSortDir;
+  }
 }
 
 for (const radio of itemSortRadios) {
@@ -2846,7 +2878,19 @@ for (const radio of itemSortRadios) {
     if (!radio.checked) {
       return;
     }
-    state.itemSort = radio.value === "checked" ? "checked" : "name";
+    state.itemSort = parseItemSort(radio.value);
+    closeOpenItemSwipe({ animate: false });
+    syncItemSortRadios();
+    renderItems();
+  });
+}
+
+for (const radio of itemSortDirRadios) {
+  radio.addEventListener("change", () => {
+    if (!radio.checked) {
+      return;
+    }
+    state.itemSortDir = parseSortDir(radio.value);
     closeOpenItemSwipe({ animate: false });
     syncItemSortRadios();
     renderItems();

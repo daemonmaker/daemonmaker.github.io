@@ -74,19 +74,30 @@ function compareByName(a, b) {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
-export function sortItems(items, sortKey) {
+/** @param {unknown} value @returns {"asc" | "desc"} */
+export function parseSortDir(value) {
+  return value === "desc" ? "desc" : "asc";
+}
+
+/**
+ * @param {Array<{ name: string, checked?: boolean }>} items
+ * @param {"name" | "checked" | string} sortKey
+ * @param {"asc" | "desc" | string} [sortDir]
+ */
+export function sortItems(items, sortKey, sortDir = "asc") {
   const sorted = [...items];
+  const dir = parseSortDir(sortDir) === "desc" ? -1 : 1;
   if (sortKey === "checked") {
     sorted.sort((a, b) => {
       const aChecked = isChecked(a);
       const bChecked = isChecked(b);
       if (aChecked !== bChecked) {
-        return aChecked ? 1 : -1;
+        return (aChecked ? 1 : -1) * dir;
       }
-      return compareByName(a, b);
+      return compareByName(a, b) * dir;
     });
     return sorted;
   }
-  sorted.sort(compareByName);
+  sorted.sort((a, b) => compareByName(a, b) * dir);
   return sorted;
 }

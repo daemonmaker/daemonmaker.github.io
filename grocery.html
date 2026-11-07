@@ -161,7 +161,11 @@
                       Dark
                     </label>
                   </fieldset>
-                  <a href="apps.html" class="user-menu__link">Micro Apps</a>
+                  <nav
+                    id="user-menu-apps"
+                    class="user-menu__apps"
+                    aria-label="Your apps"
+                  ></nav>
                   <button
                     id="btn-sign-out"
                     class="btn btn--ghost btn--block"
@@ -292,6 +296,22 @@
                     <label class="list-menu__option">
                       <input type="radio" name="item-sort" value="checked" />
                       Checked
+                    </label>
+                  </fieldset>
+                  <fieldset class="list-menu__group">
+                    <legend class="list-menu__legend">Order</legend>
+                    <label class="list-menu__option">
+                      <input
+                        type="radio"
+                        name="item-sort-dir"
+                        value="asc"
+                        checked
+                      />
+                      Ascending
+                    </label>
+                    <label class="list-menu__option">
+                      <input type="radio" name="item-sort-dir" value="desc" />
+                      Descending
                     </label>
                   </fieldset>
                   <button

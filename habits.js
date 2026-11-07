@@ -31,6 +31,7 @@ import {
   sessionView,
   accessDocIdForEmail,
   bindUidWrite,
+  userMenuAppLinks,
 } from "./apps-access.mjs";
 import {
   getFirestore,
@@ -97,6 +98,7 @@ const themeRadios = document.querySelectorAll('input[name="habit-theme"]');
 const userCoinInitial = document.getElementById("user-coin-initial");
 const btnUserMenu = document.getElementById("btn-user-menu");
 const userMenuPanel = document.getElementById("user-menu-panel");
+const userMenuApps = document.getElementById("user-menu-apps");
 const btnHabitMenu = document.getElementById("btn-habit-menu");
 const habitMenuPanel = document.getElementById("habit-menu-panel");
 const loginThemeButtons = document.querySelectorAll(
@@ -157,6 +159,23 @@ function closeUserMenu() {
   }
   userMenuPanel.hidden = true;
   btnUserMenu?.setAttribute("aria-expanded", "false");
+}
+
+function renderUserMenuApps(accessDoc, currentAppId) {
+  if (!userMenuApps) {
+    return;
+  }
+  userMenuApps.replaceChildren();
+  for (const link of userMenuAppLinks(accessDoc)) {
+    const anchor = document.createElement("a");
+    anchor.href = link.href;
+    anchor.className = "user-menu__link";
+    anchor.textContent = link.title;
+    if (link.id === currentAppId) {
+      anchor.setAttribute("aria-current", "page");
+    }
+    userMenuApps.appendChild(anchor);
+  }
 }
 
 function closeHabitMenu() {
@@ -759,6 +778,7 @@ async function startSession(user) {
       return;
     }
 
+    renderUserMenuApps(accessDoc, "habits");
     showApp();
     subscribeHabits(user.uid);
     state.ready = true;
@@ -778,6 +798,7 @@ function endSession() {
   state.pendingHabitName = null;
   state.pendingDoneKeys = {};
   closeAllMenus();
+  userMenuApps?.replaceChildren();
   showLogin();
 }
 

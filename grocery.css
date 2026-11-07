@@ -218,9 +218,14 @@ body {
   margin-top: 0.125rem;
 }
 
+.user-menu__apps {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.35rem;
+}
+
 .user-menu__link {
   display: block;
-  margin-top: 0.35rem;
   padding: 0.45rem 0.35rem;
   font-size: 0.85rem;
   font-weight: 600;
@@ -232,6 +237,12 @@ body {
 .user-menu__link:focus-visible {
   text-decoration: underline;
   outline: none;
+}
+
+.user-menu__link[aria-current="page"] {
+  color: var(--text);
+  pointer-events: none;
+  text-decoration: none;
 }
 
 .visually-hidden {

@@ -154,6 +154,11 @@ describe("ingredientExistsAmongOthers", () => {
     assert.equal(ingredientExistsAmongOthers(items, "eggs", "a"), true);
     assert.equal(ingredientExistsAmongOthers(items, "EGGS", "a"), true);
   });
+
+  it("returns false for blank ingredient names", () => {
+    assert.equal(ingredientExistsAmongOthers(items, "   ", "a"), false);
+    assert.equal(ingredientExistsAmongOthers(items, "", "a"), false);
+  });
 });
 
 describe("mealIngredientNameCommitAction", () => {
@@ -220,6 +225,22 @@ describe("mealIngredientNameCommitUIEffect", () => {
       },
     );
   });
+
+  it("passes through rename and noop effects", () => {
+    assert.deepEqual(
+      mealIngredientNameCommitUIEffect({ type: "rename", name: "Butter" }),
+      {
+        exitEditMode: true,
+        firestoreName: "Butter",
+        userMessage: null,
+      },
+    );
+    assert.deepEqual(mealIngredientNameCommitUIEffect({ type: "noop" }), {
+      exitEditMode: true,
+      firestoreName: null,
+      userMessage: null,
+    });
+  });
 });
 
 describe("mealEditorTitleCommitUIEffect", () => {
@@ -270,6 +291,18 @@ describe("mealEditorTitleCommitUIEffect", () => {
 });
 
 describe("mealEditorNameBlurAction", () => {
+  it("noops when neither saved nor drafting", () => {
+    assert.deepEqual(
+      mealEditorNameBlurAction({
+        editingMealId: null,
+        draftMealScope: null,
+        nameInput: "Soup",
+        existingMealName: null,
+      }),
+      { type: "noop" },
+    );
+  });
+
   it("does not error when a new draft meal name is still empty", () => {
     assert.deepEqual(
       mealEditorNameBlurAction({
@@ -340,6 +373,23 @@ describe("mealIngredientAddAttempt", () => {
         editingMealId: null,
         draftMealScope: "shared",
         mealNameInput: "",
+        ingredientInput: "Beans",
+        mealEditorItems: [],
+      }),
+      {
+        ok: false,
+        message: "Meal name cannot be empty.",
+        focusField: "meal_name",
+      },
+    );
+  });
+
+  it("blocks add when not editing a meal and not drafting", () => {
+    assert.deepEqual(
+      mealIngredientAddAttempt({
+        editingMealId: null,
+        draftMealScope: null,
+        mealNameInput: "Soup",
         ingredientInput: "Beans",
         mealEditorItems: [],
       }),

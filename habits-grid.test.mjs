@@ -40,6 +40,10 @@ describe("calendarYearDays", () => {
 });
 
 describe("weekGridCells", () => {
+  it("returns empty array for empty dayKeys", () => {
+    assert.deepEqual(weekGridCells([]), []);
+  });
+
   it("pads before first day for Sunday week start", () => {
     const cells = weekGridCells(["2024-01-03"], { weekStartsOn: 0 });
     assert.equal(cells[0].type, "empty");

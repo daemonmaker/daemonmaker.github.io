@@ -144,6 +144,17 @@ export function appsLauncherLinks(accessDoc) {
 }
 
 /**
+ * Granted apps plus the Micro Apps portal, for account menus.
+ * @param {{ apps?: unknown } | null | undefined} accessDoc
+ */
+export function userMenuAppLinks(accessDoc) {
+  return [
+    ...appsLauncherLinks(accessDoc),
+    { id: "portal", href: "apps.html", title: "Micro Apps" },
+  ];
+}
+
+/**
  * @param {Array<{ email?: string }>} rows
  */
 export function adminRosterSort(rows) {

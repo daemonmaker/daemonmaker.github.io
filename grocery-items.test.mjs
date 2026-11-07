@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   isChecked,
   sortItems,
+  parseSortDir,
   itemNameCommitAction,
   itemNameCommitUIEffect,
   itemNameDisplayAfterCommit,
@@ -29,6 +30,15 @@ describe("isChecked", () => {
   });
 });
 
+describe("parseSortDir", () => {
+  it("defaults unknown values to asc", () => {
+    assert.equal(parseSortDir(undefined), "asc");
+    assert.equal(parseSortDir("nope"), "asc");
+    assert.equal(parseSortDir("asc"), "asc");
+    assert.equal(parseSortDir("desc"), "desc");
+  });
+});
+
 describe("sortItems", () => {
   describe("name sort", () => {
     it("sorts by localeCompare with sensitivity base (case-insensitive)", () => {
@@ -41,6 +51,27 @@ describe("sortItems", () => {
       assert.deepEqual(
         sorted.map((i) => i.name),
         ["apples", "Bread", "Milk"],
+      );
+    });
+
+    it("reverses name order when descending", () => {
+      const items = [
+        { name: "Milk" },
+        { name: "apples" },
+        { name: "Bread" },
+      ];
+      const sorted = sortItems(items, "name", "desc");
+      assert.deepEqual(
+        sorted.map((i) => i.name),
+        ["Milk", "Bread", "apples"],
+      );
+    });
+
+    it("falls back to name sort for unknown sort keys", () => {
+      const items = [{ name: "Milk" }, { name: "apples" }];
+      assert.deepEqual(
+        sortItems(items, "nope").map((i) => i.name),
+        ["apples", "Milk"],
       );
     });
   });
@@ -56,6 +87,20 @@ describe("sortItems", () => {
       assert.deepEqual(
         sorted.map((i) => i.name),
         ["Bread", "Milk", "apples"],
+      );
+    });
+
+    it("puts checked first when descending, with reversed name tie-break", () => {
+      const items = [
+        { name: "apples", checked: true },
+        { name: "Bread", checked: false },
+        { name: "Milk", checked: false },
+        { name: "Yogurt", checked: true },
+      ];
+      const sorted = sortItems(items, "checked", "desc");
+      assert.deepEqual(
+        sorted.map((i) => i.name),
+        ["Yogurt", "apples", "Milk", "Bread"],
       );
     });
 

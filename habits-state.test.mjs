@@ -79,6 +79,13 @@ describe("isDayDoneForHabit", () => {
 });
 
 describe("reconcilePendingDoneKeys", () => {
+  it("returns a shallow copy when habit is missing", () => {
+    const pending = { "h1:2024-06-01": true };
+    const next = reconcilePendingDoneKeys(null, pending);
+    assert.deepEqual(next, pending);
+    assert.notEqual(next, pending);
+  });
+
   it("drops pending entries that match server", () => {
     const habit = { id: "h1", doneDayKeys: ["2024-06-01"] };
     const pending = {
