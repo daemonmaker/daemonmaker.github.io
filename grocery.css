@@ -1132,14 +1132,6 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .add-form {
-    flex-direction: column;
-  }
-
-  .add-form .btn--primary {
-    width: 100%;
-  }
-
   /* iOS zooms focused controls under 16px; keep page scale stable. */
   input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(
       [type="range"]
