@@ -221,7 +221,7 @@ body {
 .user-menu__link {
   display: block;
   margin-top: 0.35rem;
-  padding: 0.15rem 0;
+  padding: 0.45rem 0.35rem;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--accent);
