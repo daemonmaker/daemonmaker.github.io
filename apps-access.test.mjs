@@ -191,8 +191,18 @@ describe("inviteUpsertFields", () => {
 describe("appsLauncherLinks", () => {
   it("maps granted apps only", () => {
     assert.deepEqual(appsLauncherLinks({ apps: ["habits", "grocery"] }), [
-      { id: "grocery", href: "grocery.html", title: "Grocery" },
-      { id: "habits", href: "habits.html", title: "Habits" },
+      {
+        id: "grocery",
+        href: "grocery.html",
+        title: "Grocery",
+        description: "Shared shopping lists and meals.",
+      },
+      {
+        id: "habits",
+        href: "habits.html",
+        title: "Habits",
+        description: "Daily habit tracking on a dot grid.",
+      },
     ]);
   });
 
@@ -205,7 +215,12 @@ describe("appsLauncherLinks", () => {
 describe("userMenuAppLinks", () => {
   it("appends the Micro Apps portal after granted apps", () => {
     assert.deepEqual(userMenuAppLinks({ apps: ["habits"] }), [
-      { id: "habits", href: "habits.html", title: "Habits" },
+      {
+        id: "habits",
+        href: "habits.html",
+        title: "Habits",
+        description: "Daily habit tracking on a dot grid.",
+      },
       { id: "portal", href: "apps.html", title: "Micro Apps" },
     ]);
   });

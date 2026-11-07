@@ -3,8 +3,18 @@
 const APP_ORDER = ["grocery", "habits"];
 
 const LAUNCHER_META = {
-  grocery: { id: "grocery", href: "grocery.html", title: "Grocery" },
-  habits: { id: "habits", href: "habits.html", title: "Habits" },
+  grocery: {
+    id: "grocery",
+    href: "grocery.html",
+    title: "Grocery",
+    description: "Shared shopping lists and meals.",
+  },
+  habits: {
+    id: "habits",
+    href: "habits.html",
+    title: "Habits",
+    description: "Daily habit tracking on a dot grid.",
+  },
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

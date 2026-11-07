@@ -405,7 +405,16 @@ function renderLauncher() {
     const a = document.createElement("a");
     a.className = "launcher__link";
     a.href = link.href;
-    a.textContent = link.title;
+    const title = document.createElement("span");
+    title.className = "launcher__title";
+    title.textContent = link.title;
+    a.appendChild(title);
+    if (link.description) {
+      const desc = document.createElement("span");
+      desc.className = "launcher__desc";
+      desc.textContent = link.description;
+      a.appendChild(desc);
+    }
     li.appendChild(a);
     launcherList.appendChild(li);
   }
