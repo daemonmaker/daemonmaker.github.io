@@ -80,6 +80,14 @@
         </div>
       </section>
 
+      <section id="view-not-found" class="not-found" hidden>
+        <h1 class="not-found__code">404</h1>
+        <p class="not-found__lead">Not found.</p>
+        <button id="btn-not-found-sign-out" class="btn btn--ghost" type="button">
+          Sign out
+        </button>
+      </section>
+
       <section id="view-app" class="shell" hidden>
         <div class="shell__body">
           <aside class="sidebar" aria-label="Habits">
@@ -124,6 +132,7 @@
                       Dark
                     </label>
                   </fieldset>
+                  <a href="apps.html" class="user-menu__link">Apps</a>
                   <button
                     id="btn-sign-out"
                     class="btn btn--ghost btn--block"
@@ -134,18 +143,18 @@
                 </div>
               </div>
             </div>
-            <div class="sidebar__habits-row">
+            <div class="sidebar__habits">
               <div class="list-nav__scroll">
                 <ul id="habit-nav" class="list-nav"></ul>
               </div>
               <button
                 id="btn-new-habit"
-                class="btn-new-habit"
+                class="btn btn--text btn-new-habit"
                 type="button"
-                aria-label="New habit"
-                title="New habit"
+                aria-label="Add habit"
               >
-                +
+                <span class="btn-new-habit__compact" aria-hidden="true">+</span>
+                <span class="btn-new-habit__label">Add habit</span>
               </button>
             </div>
           </aside>

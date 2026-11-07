@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apps</title>
+    <meta name="description" content="App launcher and access." />
+    <link rel="icon" href="data:," />
+    <script>
+      (function () {
+        var theme = localStorage.getItem("apps_theme");
+        if (theme !== "light" && theme !== "dark" && theme !== "system") {
+          theme = "system";
+        }
+        document.documentElement.dataset.appsTheme = theme;
+      })();
+    </script>
+    <link rel="stylesheet" href="apps.css" />
+    <script>
+      (function () {
+        var hash = location.hash;
+        if (
+          hash &&
+          (hash.indexOf("access_token=") !== -1 ||
+            hash.indexOf("id_token=") !== -1 ||
+            hash.indexOf("error=") !== -1)
+        ) {
+          sessionStorage.setItem("apps_oauth_hash", hash);
+          history.replaceState(null, "", location.pathname + location.search);
+        }
+        Object.keys(sessionStorage).forEach(function (key) {
+          if (key.indexOf("firebase") !== -1) {
+            sessionStorage.removeItem(key);
+          }
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app" class="app">
+      <section id="view-login" class="login" hidden>
+        <div class="login__panel">
+          <p class="login__eyebrow">Launcher</p>
+          <h1 class="login__title">Apps</h1>
+          <p class="login__lead">Sign in with Google to open your apps.</p>
+          <div class="login__theme" role="group" aria-label="Theme">
+            <button
+              type="button"
+              class="btn btn--ghost login__theme-btn"
+              data-apps-theme-pick="system"
+            >
+              System
+            </button>
+            <button
+              type="button"
+              class="btn btn--ghost login__theme-btn"
+              data-apps-theme-pick="light"
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              class="btn btn--ghost login__theme-btn"
+              data-apps-theme-pick="dark"
+            >
+              Dark
+            </button>
+          </div>
+          <p id="login-status" class="login__status" hidden></p>
+          <button id="btn-google-sign-in" class="btn btn--primary" type="button">
+            Sign in with Google
+          </button>
+          <p id="login-oauth-hint" class="login__oauth-hint">
+            Authorized redirect URI:
+            <code>https://daemonmaker.github.io/apps.html</code>
+          </p>
+          <p id="login-error" class="message message--error" hidden></p>
+        </div>
+      </section>
+
+      <section id="view-not-found" class="not-found" hidden>
+        <h1 class="not-found__code">404</h1>
+        <p class="not-found__lead">Not found.</p>
+        <button id="btn-not-found-sign-out" class="btn btn--ghost" type="button">
+          Sign out
+        </button>
+      </section>
+
+      <section id="view-app" class="shell" hidden>
+        <div class="app-title-row">
+          <h2 class="app-heading">Apps</h2>
+          <div class="user-menu">
+            <button
+              type="button"
+              id="btn-user-menu"
+              class="user-coin"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="user-menu-panel"
+            >
+              <span id="user-coin-initial" class="user-coin__initial">?</span>
+              <span class="visually-hidden">Account menu</span>
+            </button>
+            <div
+              id="user-menu-panel"
+              class="menu-panel user-menu__panel"
+              hidden
+              role="menu"
+            >
+              <p id="user-label" class="user-menu__name"></p>
+              <fieldset class="theme-controls theme-controls--menu">
+                <legend class="theme-controls__legend">Theme</legend>
+                <label class="theme-controls__option">
+                  <input type="radio" name="apps-theme" value="system" checked />
+                  System
+                </label>
+                <label class="theme-controls__option">
+                  <input type="radio" name="apps-theme" value="light" />
+                  Light
+                </label>
+                <label class="theme-controls__option">
+                  <input type="radio" name="apps-theme" value="dark" />
+                  Dark
+                </label>
+              </fieldset>
+              <button
+                id="btn-sign-out"
+                class="btn btn--ghost btn--block"
+                type="button"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+        <p id="app-message" class="message message--info" hidden></p>
+
+        <section class="launcher" aria-labelledby="launcher-heading">
+          <h2 id="launcher-heading" class="section-title">Your apps</h2>
+          <ul id="launcher-list" class="launcher__list"></ul>
+          <p id="launcher-empty" class="launcher__empty" hidden>
+            No apps are enabled for your account.
+          </p>
+        </section>
+
+        <section
+          id="admin-panel"
+          class="admin"
+          aria-labelledby="admin-heading"
+          hidden
+        >
+          <h2 id="admin-heading" class="section-title">People &amp; access</h2>
+          <form id="invite-form" class="invite-form">
+            <label class="field">
+              <span class="field__label">Email</span>
+              <input
+                id="invite-email"
+                name="email"
+                type="email"
+                required
+                autocomplete="email"
+                class="field__input"
+              />
+            </label>
+            <fieldset class="invite-form__apps">
+              <legend class="field__label">Apps</legend>
+              <label class="check">
+                <input type="checkbox" name="app" value="grocery" checked />
+                Grocery
+              </label>
+              <label class="check">
+                <input type="checkbox" name="app" value="habits" checked />
+                Habits
+              </label>
+            </fieldset>
+            <button type="submit" class="btn btn--primary">Save invite</button>
+          </form>
+          <div class="roster" id="roster" role="table" aria-label="Access roster"></div>
+        </section>
+      </section>
+    </div>
+    <script type="module" src="apps.js"></script>
+  </body>
+</html>

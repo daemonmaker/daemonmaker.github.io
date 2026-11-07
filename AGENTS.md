@@ -1,8 +1,9 @@
 # AGENTS.md
 
-Static GitHub Pages site at https://daemonmaker.github.io. Three surfaces:
+Static GitHub Pages site at https://daemonmaker.github.io. Four surfaces:
 
 - Portfolio: `index.html` + `style.css`. LinkedIn is the only outbound link.
+- Apps launcher: unlisted app at `/apps.html`. Do not link it from the portfolio.
 - Grocery lists: unlisted app at `/grocery.html`. Do not link it from the portfolio.
 - Habit tracker: unlisted app at `/habits.html`. Do not link it from the portfolio.
 
@@ -27,7 +28,7 @@ Firebase project `daemonmaker-grocery`. Firestore region `us-west3`. The web API
 - `meals/{mealId}` — saved meals, not grocery lists: `name`, `scope` (`shared` | `personal`), `ownerUid` (personal only), `createdAt`, `updatedAt` (same shape as `lists/{listId}`).
 - `meals/{mealId}/items/{itemId}` — ingredient lines only: `name`, `createdAt`. No `checked`; checked state lives on grocery list items when a meal is added to a list.
 
-Any signed-in user can create, rename, delete, and edit shared lists and their items. Personal lists are owner-only. Only a shared list can be the global default. Deleting the default reassigns it or recreates `shared-grocery`. Shared meals and their ingredients are editable by any signed-in user; personal meals are owner-only.
+Only users with `grocery` in `access/{emailKey}.apps` may read or write grocery data (Firestore rules + client 404 if signed in without access). Among entitled users, shared lists and meals are editable by anyone signed in; personal lists and meals are owner-only. Only a shared list can be the global default. Deleting the default reassigns it or recreates `shared-grocery`.
 
 `firestore.rules` is the rules source, but GitHub Pages does not publish them. Copy the file into the Firebase console and publish it after any rules change (including list item `checked` or `name` updates and `meals` rules). List reads are split into `get` and `list`: a `get` of a missing list must be allowed, or `ensureBootstrap()` fails with `permission-denied` before it can create `shared-grocery`. `readDocOrMissing()` treats that denial as "missing" and then creates the doc. Queries use `list` and must stay constrained to `scope == shared` or `ownerUid == auth.uid`. Meal access follows the same shared vs personal pattern as lists.
 
@@ -82,7 +83,7 @@ Files: `habits.html`, `habits.css`, `habits.js`, `habits-config.js`, `habits-gri
 
 ### Data model
 
-- `habits/{habitId}` — `name`, `ownerUid`, `doneColor`, `undoneColor`, `todayOutlineColor`, `doneDayKeys` (array of `yyyy-mm-dd` strings), `createdAt`, `updatedAt`. Owner-only; query `where ownerUid == auth.uid`. Toggle a day with `arrayUnion` / `arrayRemove` on `doneDayKeys` (missing field treated as empty in the UI).
+- `habits/{habitId}` — `name`, `ownerUid`, `doneColor`, `undoneColor`, `todayOutlineColor`, `doneDayKeys` (array of `yyyy-mm-dd` strings), `createdAt`, `updatedAt`. Requires `habits` in `access/{emailKey}.apps`. Owner-only; query `where ownerUid == auth.uid`. Toggle a day with `arrayUnion` / `arrayRemove` on `doneDayKeys` (missing field treated as empty in the UI). Client shows 404 when signed in without access.
 
 ### UI
 
@@ -106,21 +107,54 @@ Register those redirect URIs on the same Google OAuth web client as grocery.
 
 Keep the same `[hidden] { display: none !important; }` rule in `habits.css` as grocery (login grid vs signed-in shell).
 
+## Apps launcher
+
+Files: `apps.html`, `apps.css`, `apps.js`, `apps-config.js`, `apps-access.mjs`, `apps-access.test.mjs`. Same Firebase project and auth domain as grocery/habits. Does not import grocery, habits, or portfolio files.
+
+### Data model
+
+- `config/admins` — `uids` and `emails` (lowercase) for admins who can manage invites. Readable by any signed-in user; writable by admins only. Bootstrap: seed admin emails in `apps-config.js` (`SEED_ADMIN_EMAILS`) and matching literals in `firestore.rules` `isSeedAdmin()`.
+- `access/{emailKey}` — `email` (lowercase, equals doc id), `apps` (`grocery` | `habits`), optional `uid` (set on first sign-in), optional `displayName`, `createdAt`, `updatedAt`. Invites are admin-only; users may bind their own `uid`.
+
+### UI
+
+Non-admins with an access doc see launcher links for granted apps. Admins also see **People & access** (invite by email, toggle apps, remove). Signed-in users without an access doc see 404 (same pattern on grocery/habits when the app is missing from `apps`).
+
+Access helpers live in `apps-access.mjs` (`normalizeEmail`, `hasApp`, `sessionView`, `bindUidWrite`, `inviteUpsertFields`, `appsLauncherLinks`, `isAdminUser`, etc.).
+
+### Sign-in
+
+Same implicit Google redirect pattern with apps-specific keys:
+
+1. Inline script in `apps.html`: stash OAuth hash in `sessionStorage` `apps_oauth_hash`, strip hash, clear `firebase` session keys.
+2. `localStorage` `apps_google_oauth_nonce` for nonce verification.
+3. Prod redirect: `https://daemonmaker.github.io/apps.html` (`apps-config.js`). Local: `http://localhost:8000/apps.html`.
+
+Register those redirect URIs on the same Google OAuth web client as grocery.
+
+### CSS
+
+Keep the same `[hidden] { display: none !important; }` rule in `apps.css` as grocery (login grid vs signed-in shell).
+
+### Deploy order (access rules)
+
+After publishing `firestore.rules` with `hasApp()` gates: sign in to `/apps.html` as seed admin first so the client can create `config/admins` and your `access/{email}` doc with both apps; then invite others before they rely on grocery/habits.
+
 ## Local preview
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000/grocery.html` or `http://localhost:8000/habits.html`. The local server serves the working tree, so it is ahead of GitHub Pages until `main` is pushed.
+Open `http://localhost:8000/grocery.html`, `http://localhost:8000/habits.html`, or `http://localhost:8000/apps.html`. The local server serves the working tree, so it is ahead of GitHub Pages until `main` is pushed.
 
 Pure helper tests:
 
 ```bash
-node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs habits-grid.test.mjs habits-state.test.mjs
+node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs
 ```
 
-After habits rule changes, copy `firestore.rules` into the Firebase console and publish (same as grocery).
+After access or habits rule changes, copy `firestore.rules` into the Firebase console and publish (same as grocery).
 
 ## Deploy
 

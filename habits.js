@@ -28,12 +28,18 @@ import {
   parseRangePref,
 } from "./habits-state.mjs";
 import {
+  sessionView,
+  accessDocIdForEmail,
+  bindUidWrite,
+} from "./apps-access.mjs";
+import {
   getFirestore,
   collection,
   doc,
   addDoc,
   updateDoc,
   deleteDoc,
+  getDoc,
   query,
   where,
   onSnapshot,
@@ -66,6 +72,7 @@ const db = getFirestore(app);
 
 const viewLogin = document.getElementById("view-login");
 const viewApp = document.getElementById("view-app");
+const viewNotFound = document.getElementById("view-not-found");
 const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
 const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
@@ -191,14 +198,48 @@ function setThemeFromUI(mode) {
   syncThemeRadios();
 }
 
-function showLogin() {
-  viewLogin.hidden = false;
+function hideAllViews() {
+  viewLogin.hidden = true;
   viewApp.hidden = true;
+  viewNotFound.hidden = true;
+}
+
+function showLogin() {
+  hideAllViews();
+  viewLogin.hidden = false;
+}
+
+function showNotFound() {
+  hideAllViews();
+  viewNotFound.hidden = false;
 }
 
 function showApp() {
-  viewLogin.hidden = true;
+  hideAllViews();
   viewApp.hidden = false;
+}
+
+async function loadAccessDoc(user) {
+  const emailKey = accessDocIdForEmail(user.email || "");
+  if (!emailKey) {
+    return null;
+  }
+  const snap = await getDoc(doc(db, "access", emailKey));
+  return snap.exists() ? snap.data() : null;
+}
+
+async function maybeBindAccessUid(user, accessDoc) {
+  const emailKey = accessDocIdForEmail(user.email || "");
+  const bind = bindUidWrite({ accessDoc, uid: user.uid });
+  if (!bind.ok || !bind.patch) {
+    return accessDoc;
+  }
+  await updateDoc(doc(db, "access", emailKey), {
+    ...bind.patch,
+    updatedAt: serverTimestamp(),
+  });
+  const snap = await getDoc(doc(db, "access", emailKey));
+  return snap.data();
 }
 
 function setLoginError(message) {
@@ -698,10 +739,27 @@ async function startSession(user) {
     userCoinInitial.textContent = userCoinLetter(user);
   }
 
-  showApp();
   setAppMessage("");
 
   try {
+    let accessDoc = await loadAccessDoc(user);
+    if (
+      sessionView({ accessDoc, appId: "habits", seedAdmin: false }) ===
+      "notFound"
+    ) {
+      showNotFound();
+      return;
+    }
+    accessDoc = await maybeBindAccessUid(user, accessDoc);
+    if (
+      sessionView({ accessDoc, appId: "habits", seedAdmin: false }) ===
+      "notFound"
+    ) {
+      showNotFound();
+      return;
+    }
+
+    showApp();
     subscribeHabits(user.uid);
     state.ready = true;
     renderAll();
@@ -722,6 +780,12 @@ function endSession() {
   closeAllMenus();
   showLogin();
 }
+
+document
+  .getElementById("btn-not-found-sign-out")
+  ?.addEventListener("click", async () => {
+    await signOut(auth);
+  });
 
 document.getElementById("btn-sign-out").addEventListener("click", async () => {
   await signOut(auth);

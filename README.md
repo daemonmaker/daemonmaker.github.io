@@ -10,6 +10,7 @@ Plain static files. No build step, no generator, no framework.
 - `index.html`
 - `style.css`
 - `assets/headshot.jpg`
+- `apps.html`, `apps.css`, `apps.js`, `apps-config.js`, `apps-access.mjs`, `apps-access.test.mjs` — unlisted app launcher and access admin (Firebase)
 - `grocery.html`, `grocery.css`, `grocery.js`, `grocery-config.js`, `grocery-items.mjs`, `grocery-meals.mjs`, `grocery-meal-editor.mjs` — unlisted grocery lists and meals (Firebase)
 - `firestore.rules`, `firestore.indexes.json` — rules and index source; publish rules in the Firebase console
 - `__/auth/*`, `__/firebase/init.json` — unused Firebase Auth handler copies, not the sign-in path
@@ -66,11 +67,28 @@ omits employer/project names and any specific metrics — keep it that way.
 LinkedIn is the only external contact link; do not add `mailto:` or GitHub
 links.
 
+## Apps launcher and access
+
+Unlisted app at [daemonmaker.github.io/apps.html](https://daemonmaker.github.io/apps.html)
+(not linked from the portfolio). After sign-in, users with an `access/{email}`
+doc see links to grocery and/or habits. Seed admins (`SEED_ADMIN_EMAILS` in
+[apps-config.js](apps-config.js), mirrored in [firestore.rules](firestore.rules))
+can invite people by email and toggle `grocery` / `habits`. Grocery and habits
+require the matching app in `access/{email}.apps`; otherwise the client shows
+404 and Firestore denies data.
+
+**After publishing access rules:** sign in to `apps.html` as seed admin first so
+your access doc and `config/admins` are created, then invite anyone who already
+used grocery/habits.
+
+Register OAuth redirect URIs `https://daemonmaker.github.io/apps.html` and
+`http://localhost:8000/apps.html` on the same Web client as grocery.
+
 ## Grocery lists
 
 Unlisted app at [daemonmaker.github.io/grocery.html](https://daemonmaker.github.io/grocery.html)
 (not linked from the portfolio). Google sign-in via Firebase Auth; data in
-Firestore project `daemonmaker-grocery`.
+Firestore project `daemonmaker-grocery`. Requires `grocery` in your access doc.
 
 ### Data model
 
@@ -124,6 +142,10 @@ detection excludes the row being renamed).
 
    - `https://daemonmaker.github.io/grocery.html`
    - `http://localhost:8000/grocery.html`
+   - `https://daemonmaker.github.io/habits.html`
+   - `http://localhost:8000/habits.html`
+   - `https://daemonmaker.github.io/apps.html`
+   - `http://localhost:8000/apps.html`
 
 Sign-in is a full-page redirect to Google. The page returns with an `id_token`
 and `access_token` in the URL hash, and `grocery.js` signs in with
@@ -139,5 +161,5 @@ registered above.
 Item sort/check and meal helpers:
 
 ```bash
-node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs
+node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs
 ```

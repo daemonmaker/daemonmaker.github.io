@@ -5,6 +5,95 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function authEmail() {
+      return request.auth.token.email;
+    }
+
+    // Must match SEED_ADMIN_EMAILS in apps-config.js
+    function isSeedAdmin() {
+      return isSignedIn()
+        && authEmail() in ['daemonmaker@gmail.com'];
+    }
+
+    function adminsData() {
+      return get(/databases/$(database)/documents/config/admins).data;
+    }
+
+    function adminsExists() {
+      return exists(/databases/$(database)/documents/config/admins);
+    }
+
+    function isConfigAdmin() {
+      return isSignedIn()
+        && adminsExists()
+        && (
+          request.auth.uid in adminsData().uids
+          || authEmail() in adminsData().emails
+        );
+    }
+
+    function isAdmin() {
+      return isSeedAdmin() || isConfigAdmin();
+    }
+
+    function userAccessPath() {
+      return /databases/$(database)/documents/access/$(authEmail());
+    }
+
+    function accessExistsForCaller() {
+      return exists(userAccessPath());
+    }
+
+    function callerAccessData() {
+      return get(userAccessPath()).data;
+    }
+
+    function hasApp(appId) {
+      return accessExistsForCaller()
+        && appId in callerAccessData().apps;
+    }
+
+    function isAccessSubject(emailKey) {
+      return isSignedIn() && authEmail() == emailKey;
+    }
+
+    function accessAppsValid(apps) {
+      return apps is list
+        && apps.size() <= 2
+        && apps.hasOnly(['grocery', 'habits']);
+    }
+
+    function isAccessUidBindPatch() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['uid', 'updatedAt', 'displayName'])
+        || changed.hasOnly(['uid', 'updatedAt'])
+        || changed.hasOnly(['uid', 'displayName'])
+        || changed.hasOnly(['uid'])
+        || changed.hasOnly(['displayName', 'updatedAt'])
+        || changed.hasOnly(['displayName']);
+    }
+
+    function isSelfAccessBindUpdate(emailKey) {
+      return isAccessSubject(emailKey)
+        && isAccessUidBindPatch()
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.apps == resource.data.apps
+        && accessAppsValid(request.resource.data.apps)
+        && (!('uid' in request.resource.data)
+          || request.resource.data.uid == request.auth.uid)
+        && (resource.data.uid == null
+          || resource.data.uid == request.auth.uid);
+    }
+
+    function isAdminAccessPatch() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly([
+        'apps', 'email', 'updatedAt', 'displayName', 'uid'
+      ]) || changed.hasOnly(['apps', 'updatedAt'])
+        || changed.hasOnly(['apps', 'email', 'updatedAt'])
+        || changed.hasOnly(['email', 'updatedAt']);
+    }
+
     function listData(listId) {
       return get(/databases/$(database)/documents/lists/$(listId)).data;
     }
@@ -52,14 +141,54 @@ service cloud.firestore {
         ]);
     }
 
+    match /config/admins {
+      allow read: if isSignedIn();
+      allow create: if isSeedAdmin()
+        && request.resource.data.keys().hasOnly(['uids', 'emails'])
+        && request.resource.data.uids is list
+        && request.resource.data.emails is list;
+      allow update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['uids', 'emails'])
+        && request.resource.data.uids is list
+        && request.resource.data.emails is list;
+    }
+
+    match /access/{emailKey} {
+      allow get: if isSignedIn()
+        && (isAdmin() || isAccessSubject(emailKey));
+
+      allow list: if isAdmin();
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+          'email', 'apps', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.email == emailKey
+        && request.resource.data.email is string
+        && accessAppsValid(request.resource.data.apps)
+        && (!('uid' in request.resource.data)
+          || request.resource.data.uid == null);
+
+      allow update: if isAdmin()
+        && isAdminAccessPatch()
+        && request.resource.data.email == emailKey
+        && accessAppsValid(request.resource.data.apps)
+        || isSelfAccessBindUpdate(emailKey);
+
+      allow delete: if isAdmin();
+    }
+
     match /habits/{habitId} {
       allow get: if isSignedIn()
+        && hasApp('habits')
         && resource.data.ownerUid == request.auth.uid;
 
       allow list: if isSignedIn()
+        && hasApp('habits')
         && resource.data.ownerUid == request.auth.uid;
 
       allow create: if isSignedIn()
+        && hasApp('habits')
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.keys().hasAll([
           'name', 'ownerUid', 'doneColor', 'undoneColor', 'todayOutlineColor',
@@ -74,6 +203,7 @@ service cloud.firestore {
         && request.resource.data.doneDayKeys.size() <= 400;
 
       allow update: if isSignedIn()
+        && hasApp('habits')
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == resource.data.ownerUid
         && (
@@ -96,12 +226,14 @@ service cloud.firestore {
             && request.resource.data.doneDayKeys.size() <= 400));
 
       allow delete: if isSignedIn()
+        && hasApp('habits')
         && resource.data.ownerUid == request.auth.uid;
     }
 
     match /config/app {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && hasApp('grocery');
       allow create, update: if isSignedIn()
+        && hasApp('grocery')
         && request.resource.data.keys().hasOnly(['defaultListId'])
         && request.resource.data.defaultListId is string
         && isSharedListId(request.resource.data.defaultListId);
@@ -109,15 +241,18 @@ service cloud.firestore {
 
     match /lists/{listId} {
       allow get: if isSignedIn()
+        && hasApp('grocery')
         && (!exists(/databases/$(database)/documents/lists/$(listId))
           || resource.data.scope == 'shared'
           || resource.data.ownerUid == request.auth.uid);
 
       allow list: if isSignedIn()
+        && hasApp('grocery')
         && (resource.data.scope == 'shared'
           || resource.data.ownerUid == request.auth.uid);
 
       allow create: if isSignedIn()
+        && hasApp('grocery')
         && request.resource.data.keys().hasAll(['name', 'scope', 'createdAt', 'updatedAt'])
         && request.resource.data.name is string
         && request.resource.data.scope in ['shared', 'personal']
@@ -130,6 +265,7 @@ service cloud.firestore {
         );
 
       allow update: if isSignedIn()
+        && hasApp('grocery')
         && (resource.data.scope == 'shared'
           || resource.data.ownerUid == request.auth.uid)
         && request.resource.data.scope == resource.data.scope
@@ -139,19 +275,24 @@ service cloud.firestore {
         );
 
       allow delete: if isSignedIn()
+        && hasApp('grocery')
         && (resource.data.scope == 'shared'
           || resource.data.ownerUid == request.auth.uid);
 
       match /items/{itemId} {
-        allow read, delete: if isSignedIn() && canAccessList(listId);
+        allow read, delete: if isSignedIn()
+          && hasApp('grocery')
+          && canAccessList(listId);
 
         allow create: if isSignedIn()
+          && hasApp('grocery')
           && canAccessList(listId)
           && request.resource.data.keys().hasAll(['name', 'createdAt', 'checked'])
           && request.resource.data.name is string
           && request.resource.data.checked is bool;
 
         allow update: if isSignedIn()
+          && hasApp('grocery')
           && canAccessList(listId)
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
@@ -173,15 +314,18 @@ service cloud.firestore {
 
     match /meals/{mealId} {
       allow get: if isSignedIn()
+        && hasApp('grocery')
         && (!exists(/databases/$(database)/documents/meals/$(mealId))
           || resource.data.scope == 'shared'
           || resource.data.ownerUid == request.auth.uid);
 
       allow list: if isSignedIn()
+        && hasApp('grocery')
         && (resource.data.scope == 'shared'
           || resource.data.ownerUid == request.auth.uid);
 
       allow create: if isSignedIn()
+        && hasApp('grocery')
         && request.resource.data.keys().hasAll(['name', 'scope', 'createdAt', 'updatedAt'])
         && request.resource.data.name is string
         && request.resource.data.scope in ['shared', 'personal']
@@ -194,6 +338,7 @@ service cloud.firestore {
         );
 
       allow update: if isSignedIn()
+        && hasApp('grocery')
         && (resource.data.scope == 'shared'
           || resource.data.ownerUid == request.auth.uid)
         && request.resource.data.scope == resource.data.scope
@@ -203,18 +348,23 @@ service cloud.firestore {
         );
 
       allow delete: if isSignedIn()
+        && hasApp('grocery')
         && (resource.data.scope == 'shared'
           || resource.data.ownerUid == request.auth.uid);
 
       match /items/{itemId} {
-        allow read, delete: if isSignedIn() && canAccessMeal(mealId);
+        allow read, delete: if isSignedIn()
+          && hasApp('grocery')
+          && canAccessMeal(mealId);
 
         allow create: if isSignedIn()
+          && hasApp('grocery')
           && canAccessMeal(mealId)
           && request.resource.data.keys().hasOnly(['name', 'createdAt'])
           && request.resource.data.name is string;
 
         allow update: if isSignedIn()
+          && hasApp('grocery')
           && canAccessMeal(mealId)
           && request.resource.data.name is string
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);

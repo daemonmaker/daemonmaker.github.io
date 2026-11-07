@@ -34,6 +34,13 @@ import {
   mealIngredientAddAttempt,
 } from "./grocery-meal-editor.mjs";
 import {
+  sessionView,
+  accessDocIdForEmail,
+  bindUidWrite,
+  userCoinLetter,
+  parseThemePref,
+} from "./apps-access.mjs";
+import {
   getFirestore,
   collection,
   doc,
@@ -69,12 +76,19 @@ const auth = initializeAuth(app, {
 const db = getFirestore(app);
 const viewLogin = document.getElementById("view-login");
 const viewApp = document.getElementById("view-app");
+const viewNotFound = document.getElementById("view-not-found");
 const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
 const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
 const OAUTH_NONCE_KEY = "grocery_google_oauth_nonce";
+const THEME_KEY = "grocery_theme";
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
+const userCoinInitial = document.getElementById("user-coin-initial");
+const btnUserMenu = document.getElementById("btn-user-menu");
+const userMenuPanel = document.getElementById("user-menu-panel");
+const themeRadios = document.querySelectorAll('input[name="grocery-theme"]');
+const loginThemeButtons = document.querySelectorAll("[data-grocery-theme-pick]");
 const listSharedEl = document.getElementById("list-shared");
 const listPersonalEl = document.getElementById("list-personal");
 const activeListNameEl = document.getElementById("active-list-name");
@@ -136,14 +150,98 @@ let itemsUnsub = null;
 let mealEditorItemsUnsub = null;
 let mealDialogItemsUnsub = null;
 
-function showLogin() {
-  viewLogin.hidden = false;
+function applyTheme(mode) {
+  document.documentElement.dataset.groceryTheme = mode;
+}
+
+function syncThemeRadios() {
+  const mode = parseThemePref(localStorage.getItem(THEME_KEY));
+  for (const radio of themeRadios) {
+    radio.checked = radio.value === mode;
+  }
+  for (const btn of loginThemeButtons) {
+    const pressed = btn.getAttribute("data-grocery-theme-pick") === mode;
+    btn.setAttribute("aria-pressed", pressed ? "true" : "false");
+    btn.classList.toggle("login__theme-btn--active", pressed);
+  }
+}
+
+function setThemeFromUI(mode) {
+  const next =
+    mode === "light" || mode === "dark" || mode === "system" ? mode : "system";
+  applyTheme(next);
+  localStorage.setItem(THEME_KEY, next);
+  syncThemeRadios();
+}
+
+function closeUserMenu() {
+  if (!userMenuPanel) {
+    return;
+  }
+  userMenuPanel.hidden = true;
+  btnUserMenu?.setAttribute("aria-expanded", "false");
+}
+
+function toggleUserMenu() {
+  const willOpen = userMenuPanel.hidden;
+  if (willOpen) {
+    userMenuPanel.hidden = false;
+    btnUserMenu.setAttribute("aria-expanded", "true");
+  } else {
+    closeUserMenu();
+  }
+}
+
+function hideAllViews() {
+  viewLogin.hidden = true;
   viewApp.hidden = true;
+  viewNotFound.hidden = true;
+  viewLogin.inert = true;
+  viewApp.inert = true;
+  viewNotFound.inert = true;
+}
+
+function showLogin() {
+  hideAllViews();
+  viewLogin.hidden = false;
+  viewLogin.inert = false;
+  closeUserMenu();
+}
+
+function showNotFound() {
+  hideAllViews();
+  viewNotFound.hidden = false;
+  viewNotFound.inert = false;
+  closeUserMenu();
 }
 
 function showApp() {
-  viewLogin.hidden = true;
+  hideAllViews();
   viewApp.hidden = false;
+  viewApp.inert = false;
+}
+
+async function loadAccessDoc(user) {
+  const emailKey = accessDocIdForEmail(user.email || "");
+  if (!emailKey) {
+    return null;
+  }
+  const snap = await getDoc(doc(db, "access", emailKey));
+  return snap.exists() ? snap.data() : null;
+}
+
+async function maybeBindAccessUid(user, accessDoc) {
+  const emailKey = accessDocIdForEmail(user.email || "");
+  const bind = bindUidWrite({ accessDoc, uid: user.uid });
+  if (!bind.ok || !bind.patch) {
+    return accessDoc;
+  }
+  await updateDoc(doc(db, "access", emailKey), {
+    ...bind.patch,
+    updatedAt: serverTimestamp(),
+  });
+  const snap = await getDoc(doc(db, "access", emailKey));
+  return snap.data();
 }
 
 function setLoginError(message) {
@@ -2139,11 +2237,32 @@ async function startSession(user) {
   userLabel.textContent = user.displayName
     ? `${user.displayName} (${user.email})`
     : user.email || user.uid;
+  if (userCoinInitial) {
+    userCoinInitial.textContent = userCoinLetter(user);
+  }
 
-  showApp();
   setAppMessage("");
+  closeUserMenu();
 
   try {
+    let accessDoc = await loadAccessDoc(user);
+    if (
+      sessionView({ accessDoc, appId: "grocery", seedAdmin: false }) ===
+      "notFound"
+    ) {
+      showNotFound();
+      return;
+    }
+    accessDoc = await maybeBindAccessUid(user, accessDoc);
+    if (
+      sessionView({ accessDoc, appId: "grocery", seedAdmin: false }) ===
+      "notFound"
+    ) {
+      showNotFound();
+      return;
+    }
+
+    showApp();
     await ensureBootstrap();
     subscribeConfig();
     subscribeLists(user.uid);
@@ -2186,6 +2305,12 @@ function endSession() {
   state.ready = false;
   showLogin();
 }
+
+document
+  .getElementById("btn-not-found-sign-out")
+  ?.addEventListener("click", async () => {
+    await signOut(auth);
+  });
 
 document.getElementById("btn-sign-out").addEventListener("click", async () => {
   await signOut(auth);
@@ -2314,6 +2439,40 @@ itemSortEl.addEventListener("change", () => {
   state.itemSort = itemSortEl.value;
   renderItems();
 });
+
+for (const btn of loginThemeButtons) {
+  btn.addEventListener("click", () => {
+    setThemeFromUI(btn.getAttribute("data-grocery-theme-pick"));
+  });
+}
+
+for (const radio of themeRadios) {
+  radio.addEventListener("change", () => {
+    if (!radio.checked) {
+      return;
+    }
+    setThemeFromUI(radio.value);
+  });
+}
+
+btnUserMenu?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleUserMenu();
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".user-menu")) {
+    closeUserMenu();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeUserMenu();
+  }
+});
+
+setThemeFromUI(parseThemePref(localStorage.getItem(THEME_KEY)));
 
 async function initAuth() {
   showLogin();

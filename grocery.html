@@ -6,6 +6,15 @@
     <title>Grocery lists</title>
     <meta name="description" content="Shared and personal grocery lists." />
     <link rel="icon" href="data:," />
+    <script>
+      (function () {
+        var theme = localStorage.getItem("grocery_theme");
+        if (theme !== "light" && theme !== "dark" && theme !== "system") {
+          theme = "system";
+        }
+        document.documentElement.dataset.groceryTheme = theme;
+      })();
+    </script>
     <link rel="stylesheet" href="grocery.css" />
     <script>
       (function () {
@@ -37,6 +46,29 @@
             Sign in with Google to open the shared default list and your
             personal lists.
           </p>
+          <div class="login__theme" role="group" aria-label="Theme">
+            <button
+              type="button"
+              class="btn btn--ghost login__theme-btn"
+              data-grocery-theme-pick="system"
+            >
+              System
+            </button>
+            <button
+              type="button"
+              class="btn btn--ghost login__theme-btn"
+              data-grocery-theme-pick="light"
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              class="btn btn--ghost login__theme-btn"
+              data-grocery-theme-pick="dark"
+            >
+              Dark
+            </button>
+          </div>
           <p id="login-status" class="login__status" hidden></p>
           <button id="btn-google-sign-in" class="btn btn--primary" type="button">
             Sign in with Google
@@ -49,19 +81,69 @@
         </div>
       </section>
 
-      <section id="view-app" class="shell" hidden>
-        <header class="shell__header">
-          <div>
-            <p class="shell__eyebrow">Grocery</p>
-            <p id="user-label" class="shell__user"></p>
-          </div>
-          <button id="btn-sign-out" class="btn btn--ghost" type="button">
-            Sign out
-          </button>
-        </header>
+      <section id="view-not-found" class="not-found" hidden>
+        <h1 class="not-found__code">404</h1>
+        <p class="not-found__lead">Not found.</p>
+        <button id="btn-not-found-sign-out" class="btn btn--ghost" type="button">
+          Sign out
+        </button>
+      </section>
 
+      <section id="view-app" class="shell" hidden>
         <div class="shell__body">
           <aside class="sidebar" aria-label="Lists">
+            <div class="sidebar__title-row">
+              <h2 class="sidebar__heading">Lists</h2>
+              <div class="user-menu">
+                <button
+                  type="button"
+                  id="btn-user-menu"
+                  class="user-coin"
+                  aria-haspopup="menu"
+                  aria-expanded="false"
+                  aria-controls="user-menu-panel"
+                >
+                  <span id="user-coin-initial" class="user-coin__initial">?</span>
+                  <span class="visually-hidden">Account menu</span>
+                </button>
+                <div
+                  id="user-menu-panel"
+                  class="menu-panel user-menu__panel"
+                  hidden
+                  role="menu"
+                >
+                  <p id="user-label" class="user-menu__name"></p>
+                  <fieldset class="theme-controls theme-controls--menu">
+                    <legend class="theme-controls__legend">Theme</legend>
+                    <label class="theme-controls__option">
+                      <input
+                        type="radio"
+                        name="grocery-theme"
+                        value="system"
+                        checked
+                      />
+                      System
+                    </label>
+                    <label class="theme-controls__option">
+                      <input type="radio" name="grocery-theme" value="light" />
+                      Light
+                    </label>
+                    <label class="theme-controls__option">
+                      <input type="radio" name="grocery-theme" value="dark" />
+                      Dark
+                    </label>
+                  </fieldset>
+                  <a href="apps.html" class="user-menu__link">Apps</a>
+                  <button
+                    id="btn-sign-out"
+                    class="btn btn--ghost btn--block"
+                    type="button"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="sidebar__group">
               <h2 class="sidebar__heading">Shared</h2>
               <ul id="list-shared" class="list-nav"></ul>
