@@ -26,6 +26,8 @@ import {
   parseThemePref,
   parseLayoutPref,
   parseRangePref,
+  parseStoredHabitId,
+  pickActiveHabitId,
 } from "./habits-state.mjs";
 import {
   sessionView,
@@ -34,6 +36,11 @@ import {
   userMenuAppLinks,
 } from "./apps-access.mjs";
 import {
+  HABITS_ACTIVE_HABIT_FIELD,
+  preferCloudSelectionId,
+  shouldMigrateLocalSelectionToCloud,
+} from "./app-prefs.mjs";
+import {
   getFirestore,
   collection,
   doc,
@@ -41,12 +48,14 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
+  setDoc,
   query,
   where,
   onSnapshot,
   serverTimestamp,
   arrayUnion,
   arrayRemove,
+  deleteField,
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const DEFAULT_DONE_COLOR = "#22c55e";
@@ -55,6 +64,7 @@ const DEFAULT_TODAY_OUTLINE_COLOR = "#2563eb";
 const LAYOUT_KEY = "habits_layout";
 const RANGE_KEY = "habits_range";
 const THEME_KEY = "habits_theme";
+const ACTIVE_HABIT_KEY = "habits_active_habit";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBrh3SWdqneRJFzCuIwmkGqN_U0UG_YXFE",
@@ -139,6 +149,59 @@ function applyTheme(mode) {
 
 function persistThemePref(value) {
   localStorage.setItem(THEME_KEY, value);
+}
+
+function persistHabitsActiveHabitCloud(habitId) {
+  const uid = state.user?.uid;
+  if (!uid) {
+    return Promise.resolve();
+  }
+  const stored = parseStoredHabitId(habitId);
+  const ref = doc(db, "prefs", uid);
+  const payload = stored
+    ? {
+        [HABITS_ACTIVE_HABIT_FIELD]: stored,
+        updatedAt: serverTimestamp(),
+      }
+    : {
+        [HABITS_ACTIVE_HABIT_FIELD]: deleteField(),
+        updatedAt: serverTimestamp(),
+      };
+  return setDoc(ref, payload, { merge: true }).catch(() => {});
+}
+
+async function loadHabitsActiveHabitPreference(uid) {
+  const localId = parseStoredHabitId(localStorage.getItem(ACTIVE_HABIT_KEY));
+  let cloudRaw = null;
+  try {
+    const snap = await getDoc(doc(db, "prefs", uid));
+    if (snap.exists()) {
+      cloudRaw = snap.data()[HABITS_ACTIVE_HABIT_FIELD];
+    }
+  } catch {
+    return preferCloudSelectionId({ cloud: null, local: localId });
+  }
+  if (
+    shouldMigrateLocalSelectionToCloud({ cloud: cloudRaw, local: localId })
+  ) {
+    void persistHabitsActiveHabitCloud(localId);
+  }
+  return preferCloudSelectionId({ cloud: cloudRaw, local: localId });
+}
+
+function rememberActiveHabitId(habitId) {
+  const stored = parseStoredHabitId(habitId);
+  if (stored) {
+    localStorage.setItem(ACTIVE_HABIT_KEY, stored);
+  } else {
+    localStorage.removeItem(ACTIVE_HABIT_KEY);
+  }
+  void persistHabitsActiveHabitCloud(stored);
+}
+
+function setActiveHabitId(habitId) {
+  state.activeHabitId = parseStoredHabitId(habitId);
+  rememberActiveHabitId(state.activeHabitId);
 }
 
 function syncThemeRadios() {
@@ -536,7 +599,7 @@ function selectHabit(habitId) {
   if (state.activeHabitId === habitId) {
     return;
   }
-  state.activeHabitId = habitId;
+  setActiveHabitId(habitId);
   state.editingTitle = false;
   state.pendingHabitName = null;
   renderAll();
@@ -554,15 +617,11 @@ function subscribeHabits(uid) {
         id: docSnap.id,
         ...docSnap.data(),
       }));
-      if (
-        state.activeHabitId &&
-        !state.habits.some((h) => h.id === state.activeHabitId)
-      ) {
-        state.activeHabitId = null;
-      }
-      if (!state.activeHabitId && state.habits.length > 0) {
-        state.activeHabitId = sortHabits(state.habits)[0].id;
-      }
+      const nextId = pickActiveHabitId({
+        preferredId: state.activeHabitId,
+        habits: state.habits,
+      });
+      setActiveHabitId(nextId);
       reconcilePendingDoneKeys(getActiveHabit());
       renderAll();
     },
@@ -593,7 +652,7 @@ async function createHabit() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    state.activeHabitId = ref.id;
+    setActiveHabitId(ref.id);
     renderAll();
   } catch (error) {
     setAppMessage(error.message || "Could not create habit.");
@@ -611,7 +670,7 @@ async function deleteActiveHabit() {
   setAppMessage("");
   try {
     await deleteDoc(doc(db, "habits", habit.id));
-    state.activeHabitId = null;
+    setActiveHabitId(null);
     renderAll();
   } catch (error) {
     setAppMessage(error.message || "Could not delete habit.");
@@ -780,6 +839,7 @@ async function startSession(user) {
 
     renderUserMenuApps(accessDoc, "habits");
     showApp();
+    state.activeHabitId = await loadHabitsActiveHabitPreference(user.uid);
     subscribeHabits(user.uid);
     state.ready = true;
     renderAll();

@@ -22,7 +22,17 @@ import {
   itemNameForDisplay,
   reconcilePendingItemRenames,
 } from "./grocery-items.mjs";
-import { parseSidebarTab, parseItemSort } from "./grocery-prefs.mjs";
+import {
+  parseSidebarTab,
+  parseItemSort,
+  parseStoredListId,
+  pickActiveListId,
+} from "./grocery-prefs.mjs";
+import {
+  GROCERY_ACTIVE_LIST_FIELD,
+  preferCloudSelectionId,
+  shouldMigrateLocalSelectionToCloud,
+} from "./app-prefs.mjs";
 import { matchMealItems, itemsToAdd } from "./grocery-meals.mjs";
 import {
   mealEditorDeleteAction,
@@ -59,6 +69,7 @@ import {
   onSnapshot,
   serverTimestamp,
   writeBatch,
+  deleteField,
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -85,6 +96,7 @@ const loginStatus = document.getElementById("login-status");
 const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
 const OAUTH_NONCE_KEY = "grocery_google_oauth_nonce";
 const THEME_KEY = "grocery_theme";
+const ACTIVE_LIST_KEY = "grocery_active_list";
 const SIDEBAR_TAB_COOKIE = "grocery_sidebar_tab";
 const SIDEBAR_TAB_MAX_AGE_SEC = 60 * 60 * 24 * 365;
 const appMessage = document.getElementById("app-message");
@@ -148,6 +160,8 @@ const state = {
   itemSortDir: "asc",
   openSwipeItemId: null,
   ready: false,
+  sharedListsReady: false,
+  personalListsReady: false,
   mealDialogMealId: null,
   mealDialogMealItems: [],
   editingMealDialogTarget: null,
@@ -193,6 +207,64 @@ function setThemeFromUI(mode) {
   applyTheme(next);
   localStorage.setItem(THEME_KEY, next);
   syncThemeRadios();
+}
+
+function persistGroceryActiveListCloud(listId) {
+  const uid = state.user?.uid;
+  if (!uid) {
+    return Promise.resolve();
+  }
+  const stored = parseStoredListId(listId);
+  const ref = doc(db, "prefs", uid);
+  const payload = stored
+    ? {
+        [GROCERY_ACTIVE_LIST_FIELD]: stored,
+        updatedAt: serverTimestamp(),
+      }
+    : {
+        [GROCERY_ACTIVE_LIST_FIELD]: deleteField(),
+        updatedAt: serverTimestamp(),
+      };
+  return setDoc(ref, payload, { merge: true }).catch(() => {});
+}
+
+async function loadGroceryActiveListPreference(uid) {
+  const localId = parseStoredListId(localStorage.getItem(ACTIVE_LIST_KEY));
+  let cloudRaw = null;
+  try {
+    const snap = await getDoc(doc(db, "prefs", uid));
+    if (snap.exists()) {
+      cloudRaw = snap.data()[GROCERY_ACTIVE_LIST_FIELD];
+    }
+  } catch {
+    return preferCloudSelectionId({ cloud: null, local: localId });
+  }
+  if (
+    shouldMigrateLocalSelectionToCloud({ cloud: cloudRaw, local: localId })
+  ) {
+    void persistGroceryActiveListCloud(localId);
+  }
+  return preferCloudSelectionId({ cloud: cloudRaw, local: localId });
+}
+
+function rememberActiveListId(listId) {
+  const stored = parseStoredListId(listId);
+  if (stored) {
+    localStorage.setItem(ACTIVE_LIST_KEY, stored);
+  } else {
+    localStorage.removeItem(ACTIVE_LIST_KEY);
+  }
+  void persistGroceryActiveListCloud(stored);
+}
+
+function setActiveListId(listId, { resubscribe = true } = {}) {
+  const next = parseStoredListId(listId);
+  const changed = state.activeListId !== next;
+  state.activeListId = next;
+  rememberActiveListId(next);
+  if (changed && resubscribe) {
+    subscribeItems();
+  }
 }
 
 function readCookie(name) {
@@ -527,9 +599,8 @@ function renderListNav(container, lists, emptyLabel) {
         closeListMenu();
         closeOpenItemSwipe({ animate: false });
       }
-      state.activeListId = list.id;
+      setActiveListId(list.id);
       renderAll();
-      subscribeItems();
     });
 
     li.appendChild(button);
@@ -2026,8 +2097,7 @@ function subscribeConfig() {
     const nextDefault = snap.exists() ? snap.data().defaultListId : null;
     state.defaultListId = nextDefault;
     if (state.ready && nextDefault && !state.activeListId) {
-      state.activeListId = nextDefault;
-      subscribeItems();
+      setActiveListId(nextDefault);
     }
     renderAll();
   });
@@ -2049,6 +2119,7 @@ function subscribeLists(uid) {
     state.sharedLists = sortLists(
       snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
     );
+    state.sharedListsReady = true;
     ensureActiveList();
     renderAll();
   });
@@ -2057,6 +2128,7 @@ function subscribeLists(uid) {
     state.personalLists = sortLists(
       snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
     );
+    state.personalListsReady = true;
     ensureActiveList();
     renderAll();
   });
@@ -2130,23 +2202,26 @@ function subscribeMealEditorItems(mealId) {
 function ensureActiveList() {
   const activeStillVisible = getListById(state.activeListId);
   if (activeStillVisible) {
+    rememberActiveListId(state.activeListId);
+    return;
+  }
+
+  // Wait until both list queries have loaded so a remembered personal list
+  // is not cleared when the shared snapshot arrives first.
+  if (!state.sharedListsReady || !state.personalListsReady) {
     return;
   }
 
   clearListNameEdit();
   closeListMenu();
 
-  if (state.defaultListId && getListById(state.defaultListId)) {
-    state.activeListId = state.defaultListId;
-  } else if (state.sharedLists.length) {
-    state.activeListId = state.sharedLists[0].id;
-  } else if (state.personalLists.length) {
-    state.activeListId = state.personalLists[0].id;
-  } else {
-    state.activeListId = null;
-  }
-
-  subscribeItems();
+  const nextId = pickActiveListId({
+    preferredId: state.activeListId,
+    defaultListId: state.defaultListId,
+    sharedLists: state.sharedLists,
+    personalLists: state.personalLists,
+  });
+  setActiveListId(nextId);
 }
 
 function subscribeItems() {
@@ -2446,9 +2521,8 @@ async function createList(scope) {
   const ref = await addDoc(collection(db, "lists"), payload);
   clearListNameEdit();
   closeListMenu();
-  state.activeListId = ref.id;
+  setActiveListId(ref.id);
   renderAll();
-  subscribeItems();
 }
 
 async function deleteActiveList() {
@@ -2499,7 +2573,7 @@ async function deleteActiveList() {
     }
   }
 
-  state.activeListId = null;
+  setActiveListId(null, { resubscribe: false });
   ensureActiveList();
   renderAll();
 }
@@ -2665,6 +2739,8 @@ async function startSession(user) {
   cleanupSubscriptions();
   state.user = user;
   state.ready = false;
+  state.sharedListsReady = false;
+  state.personalListsReady = false;
   state.activeListId = null;
   state.items = [];
 
@@ -2698,6 +2774,7 @@ async function startSession(user) {
 
     renderUserMenuApps(accessDoc, "grocery");
     showApp();
+    state.activeListId = await loadGroceryActiveListPreference(user.uid);
     await ensureBootstrap();
     subscribeConfig();
     subscribeLists(user.uid);
@@ -2707,8 +2784,13 @@ async function startSession(user) {
     state.defaultListId = configSnap.exists()
       ? configSnap.data().defaultListId
       : BOOTSTRAP_LIST_ID;
-    state.activeListId = state.defaultListId;
+    if (!state.activeListId) {
+      setActiveListId(state.defaultListId, { resubscribe: false });
+    } else {
+      rememberActiveListId(state.activeListId);
+    }
     state.ready = true;
+    ensureActiveList();
     subscribeItems();
     renderAll();
   } catch (error) {
@@ -2729,6 +2811,8 @@ function endSession() {
   state.activeListId = null;
   state.sharedLists = [];
   state.personalLists = [];
+  state.sharedListsReady = false;
+  state.personalListsReady = false;
   state.sharedMeals = [];
   state.personalMeals = [];
   state.items = [];

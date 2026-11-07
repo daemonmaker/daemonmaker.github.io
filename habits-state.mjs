@@ -74,3 +74,41 @@ export function parseLayoutPref(stored) {
 export function parseRangePref(stored) {
   return stored === "calendar" ? "calendar" : "rolling";
 }
+
+/** @param {unknown} value @returns {string | null} */
+export function parseStoredHabitId(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+/**
+ * Prefer a remembered habit when it still exists; otherwise the first by name.
+ * @param {{
+ *   preferredId?: unknown,
+ *   habits?: { id: string, name?: string }[],
+ * }} args
+ * @returns {string | null}
+ */
+export function pickActiveHabitId({ preferredId = null, habits = [] } = {}) {
+  const list = Array.isArray(habits) ? habits : [];
+  const visibleIds = new Set(
+    list
+      .map((habit) => habit?.id)
+      .filter((id) => typeof id === "string" && id),
+  );
+
+  const preferred = parseStoredHabitId(preferredId);
+  if (preferred && visibleIds.has(preferred)) {
+    return preferred;
+  }
+
+  const sorted = [...list]
+    .filter((habit) => typeof habit?.id === "string" && habit.id)
+    .sort((a, b) =>
+      String(a.name || "").localeCompare(String(b.name || "")),
+    );
+  return sorted[0]?.id ?? null;
+}

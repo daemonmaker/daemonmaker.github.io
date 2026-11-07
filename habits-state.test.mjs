@@ -9,6 +9,8 @@ import {
   parseThemePref,
   parseLayoutPref,
   parseRangePref,
+  parseStoredHabitId,
+  pickActiveHabitId,
 } from "./habits-state.mjs";
 
 describe("doneDayKeysForHabit", () => {
@@ -149,5 +151,43 @@ describe("parseRangePref", () => {
 
   it("defaults to rolling", () => {
     assert.equal(parseRangePref(""), "rolling");
+  });
+});
+
+describe("parseStoredHabitId", () => {
+  it("returns trimmed ids", () => {
+    assert.equal(parseStoredHabitId(" habit-1 "), "habit-1");
+  });
+
+  it("rejects empty values", () => {
+    assert.equal(parseStoredHabitId(""), null);
+    assert.equal(parseStoredHabitId("   "), null);
+    assert.equal(parseStoredHabitId(null), null);
+    assert.equal(parseStoredHabitId(3), null);
+  });
+});
+
+describe("pickActiveHabitId", () => {
+  const habits = [
+    { id: "b", name: "Brush" },
+    { id: "a", name: "Run" },
+  ];
+
+  it("prefers a remembered visible habit", () => {
+    assert.equal(
+      pickActiveHabitId({ preferredId: "a", habits }),
+      "a",
+    );
+  });
+
+  it("falls back to first by name when remembered is missing", () => {
+    assert.equal(
+      pickActiveHabitId({ preferredId: "gone", habits }),
+      "b",
+    );
+  });
+
+  it("returns null when there are no habits", () => {
+    assert.equal(pickActiveHabitId({ preferredId: "a", habits: [] }), null);
   });
 });

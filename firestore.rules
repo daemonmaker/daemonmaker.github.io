@@ -141,6 +141,30 @@ service cloud.firestore {
         ]);
     }
 
+    function isPrefsIdString(field) {
+      return field is string && field.size() > 0 && field.size() <= 256;
+    }
+
+    function isPrefsResourceValid() {
+      let keys = request.resource.data.keys();
+      return keys.hasOnly([
+          'groceryActiveListId', 'habitsActiveHabitId', 'updatedAt'
+        ])
+        && (!('groceryActiveListId' in request.resource.data)
+          || isPrefsIdString(request.resource.data.groceryActiveListId))
+        && (!('habitsActiveHabitId' in request.resource.data)
+          || isPrefsIdString(request.resource.data.habitsActiveHabitId))
+        && (!('updatedAt' in request.resource.data)
+          || request.resource.data.updatedAt is timestamp);
+    }
+
+    function isPrefsPatch() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly([
+        'groceryActiveListId', 'habitsActiveHabitId', 'updatedAt'
+      ]);
+    }
+
     match /config/admins {
       allow read: if isSignedIn();
       allow create: if isSeedAdmin()
@@ -176,6 +200,19 @@ service cloud.firestore {
         || isSelfAccessBindUpdate(emailKey);
 
       allow delete: if isAdmin();
+    }
+
+    match /prefs/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && isPrefsResourceValid();
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && isPrefsPatch()
+        && isPrefsResourceValid();
+      allow delete: if false;
     }
 
     match /habits/{habitId} {

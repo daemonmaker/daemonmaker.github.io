@@ -64,7 +64,9 @@ Firebase project `daemonmaker-grocery`. Firestore region `us-west3`. The web API
 
 Only users with `grocery` in `access/{emailKey}.apps` may read or write grocery data (Firestore rules + client 404 if signed in without access). Among entitled users, shared lists and meals are editable by anyone signed in; personal lists and meals are owner-only. Only a shared list can be the global default. Deleting the default reassigns it or recreates `shared-grocery`.
 
-`firestore.rules` is the rules source, but GitHub Pages does not publish them. Copy the file into the Firebase console and publish it after any rules change (including list item `checked` or `name` updates and `meals` rules). List reads are split into `get` and `list`: a `get` of a missing list must be allowed, or `ensureBootstrap()` fails with `permission-denied` before it can create `shared-grocery`. `readDocOrMissing()` treats that denial as "missing" and then creates the doc. Queries use `list` and must stay constrained to `scope == shared` or `ownerUid == auth.uid`. Meal access follows the same shared vs personal pattern as lists.
+- `prefs/{uid}` — per-user UI state (owner-only): optional `groceryActiveListId`, optional `habitsActiveHabitId`, `updatedAt`. Grocery and habits read/write their own field on selection; Firestore wins over `localStorage` on sign-in, with one-time upload when cloud is empty but local has a value. Helpers in `app-prefs.mjs`.
+
+`firestore.rules` is the rules source, but GitHub Pages does not publish them. Copy the file into the Firebase console and publish it after any rules change (including list item `checked` or `name` updates, `meals` rules, and `prefs/{uid}`). List reads are split into `get` and `list`: a `get` of a missing list must be allowed, or `ensureBootstrap()` fails with `permission-denied` before it can create `shared-grocery`. `readDocOrMissing()` treats that denial as "missing" and then creates the doc. Queries use `list` and must stay constrained to `scope == shared` or `ownerUid == auth.uid`. Meal access follows the same shared vs personal pattern as lists.
 
 ### Add meal to list
 
@@ -113,7 +115,7 @@ Files: `habits.html`, `habits.css`, `habits.js`, `habits-config.js`, `habits-gri
 
 ### Data model
 
-- `habits/{habitId}` — `name`, `ownerUid`, `doneColor`, `undoneColor`, `todayOutlineColor`, `doneDayKeys` (array of `yyyy-mm-dd` strings), `createdAt`, `updatedAt`. Requires `habits` in `access/{emailKey}.apps`. Owner-only; query `where ownerUid == auth.uid`. Toggle a day with `arrayUnion` / `arrayRemove` on `doneDayKeys` (missing field treated as empty in the UI). Client shows 404 when signed in without access.
+- `habits/{habitId}` — `name`, `ownerUid`, `doneColor`, `undoneColor`, `todayOutlineColor`, `doneDayKeys` (array of `yyyy-mm-dd` strings), `createdAt`, `updatedAt`. Requires `habits` in `access/{emailKey}.apps`. Owner-only; query `where ownerUid == auth.uid`. Toggle a day with `arrayUnion` / `arrayRemove` on `doneDayKeys` (missing field treated as empty in the UI). Client shows 404 when signed in without access. Active habit syncs via `prefs/{uid}.habitsActiveHabitId` (see grocery data model).
 
 ### UI
 
@@ -181,7 +183,7 @@ Open `http://localhost:8000/grocery.html`, `http://localhost:8000/habits.html`, 
 Pure helper tests:
 
 ```bash
-node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs grocery-prefs.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs apps-roster-swipe.test.mjs
+node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs grocery-prefs.test.mjs app-prefs.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs apps-roster-swipe.test.mjs
 ```
 
 After access or habits rule changes, copy `firestore.rules` into the Firebase console and publish (same as grocery).

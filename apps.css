@@ -172,8 +172,8 @@ body {
 }
 
 .login__theme-btn--active {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--text-muted);
+  color: var(--text);
 }
 
 .login__status,
@@ -242,23 +242,26 @@ body {
 }
 
 .btn--primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
+  border-color: var(--rule);
+  background: var(--surface);
+  color: var(--text);
 }
 
 .btn--primary:hover {
-  background: var(--accent-hover);
+  border-color: var(--text-muted);
+  color: var(--text);
+  background: var(--surface);
 }
 
 .btn--ghost {
   border-color: var(--rule);
   background: var(--surface);
+  color: var(--text);
 }
 
 .btn--ghost:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--text-muted);
+  color: var(--text);
 }
 
 .btn--danger {
@@ -329,7 +332,7 @@ body {
 
 .user-coin:hover,
 .user-coin:focus-visible {
-  border-color: var(--accent);
+  border-color: var(--text-muted);
   outline: none;
 }
 

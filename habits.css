@@ -183,15 +183,16 @@ body {
 }
 
 .btn--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--surface);
+  border-color: var(--rule);
+  color: var(--text);
 }
 
 .btn--primary:hover:not(:disabled),
 .btn--primary:focus-visible {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--surface);
+  border-color: var(--text-muted);
+  color: var(--text);
 }
 
 .btn--ghost {
@@ -202,8 +203,8 @@ body {
 
 .btn--ghost:hover:not(:disabled),
 .btn--ghost:focus-visible {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--text-muted);
+  color: var(--text);
 }
 
 .btn--danger {
@@ -221,14 +222,14 @@ body {
 .btn--text {
   background: transparent;
   border-color: transparent;
-  color: var(--accent);
+  color: var(--text-muted);
   padding-left: 0;
   padding-right: 0;
 }
 
 .btn--text:hover:not(:disabled),
 .btn--text:focus-visible {
-  color: var(--accent-hover);
+  color: var(--text);
 }
 
 .message {
@@ -292,8 +293,8 @@ body {
 }
 
 .login__theme-btn--active {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--text-muted);
+  color: var(--text);
 }
 
 .login__status {
@@ -345,7 +346,7 @@ body {
 
 .user-coin:hover,
 .user-coin:focus-visible {
-  border-color: var(--accent);
+  border-color: var(--text-muted);
   outline: none;
 }
 
@@ -794,8 +795,8 @@ body {
 
   .btn-new-habit:hover,
   .btn-new-habit:focus-visible {
-    border-color: var(--accent);
-    color: var(--accent);
+    border-color: var(--text-muted);
+    color: var(--text);
     outline: none;
   }
 
