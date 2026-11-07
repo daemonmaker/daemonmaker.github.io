@@ -37,6 +37,16 @@ The three Firebase apps share one tight, menu-driven chrome. Keep them aligned; 
 - **Hamburger** (`.icon-btn--menu` with `.icon-btn__bars`): contextual options for the active entity. Grocery: list menu (set default, delete). Habits: habit menu (layout, range, delete). Apps launcher has the coin only (no hamburger).
 - Put contextual actions in these menus, not as always-visible header button rows. When an app has both menus, only one panel should be open at a time.
 
+### Swipe-to-delete rows
+
+Use the same swipe pattern wherever a list row can be deleted. Do not show always-visible **Remove** / **Delete** text buttons on those rows.
+
+- Swipe the row **left** to reveal a red **trash** icon strip on the **right** (`background: var(--danger)`).
+- Markup: outer row (`overflow: hidden`, `touch-action: pan-y`) with a hidden **reveal** layer on the right (`.items__reveal` or `.roster__reveal`) and a **front** layer (`.items__front` or `.roster__front`) that translates left. Toggle `is-swiping` / `is-revealed` during interaction; CSS width via `--items-swipe-w` or `--roster-swipe-w` (typically `3.25rem`).
+- **Grocery** list items: implementation in `grocery.js` (`bindItemSwipe`, `trashIconSvg`, `ITEMS_SWIPE_WIDTH_PX` / open threshold).
+- **Micro Apps** admin roster (`#roster`): implementation in `apps-roster-swipe.mjs` (`bindRosterRowSwipe`, `clampSwipeOffset`, `shouldOpenSwipe`); wired from `apps.js`. Do not start a swipe from checkboxes on the row.
+- Only one row may stay open at a time; close on outside click or **Escape** (and when re-rendering the list).
+
 ## Grocery app
 
 Files: `grocery.html`, `grocery.css`, `grocery.js`, `grocery-config.js`, `grocery-items.mjs`, `grocery-meals.mjs`, `grocery-meal-editor.mjs`, `firestore.rules`, `firestore.indexes.json`.
@@ -91,7 +101,7 @@ Do not switch sign-in back to any of these. Each one fails on this host:
 
 ### UI
 
-Follow [Shared app chrome](#shared-app-chrome-apps-grocery-habits). Sidebar list nav with user coin; active-list **hamburger** for set-default / delete. List title uses the same inline rename pattern as item names (click title to edit).
+Follow [Shared app chrome](#shared-app-chrome-apps-grocery-habits). Sidebar list nav with user coin; active-list **hamburger** for set-default / delete (list delete stays in the menu; **item** delete uses [swipe-to-delete rows](#swipe-to-delete-rows)). List title uses the same inline rename pattern as item names (click title to edit).
 
 ### CSS
 
@@ -129,7 +139,7 @@ Keep `[hidden] { display: none !important; }` in `habits.css` as required by Sha
 
 ## Apps launcher
 
-Files: `apps.html`, `apps.css`, `apps.js`, `apps-config.js`, `apps-access.mjs`, `apps-access.test.mjs`. Same Firebase project and auth domain as grocery/habits. Does not import grocery, habits, or portfolio files.
+Files: `apps.html`, `apps.css`, `apps.js`, `apps-config.js`, `apps-access.mjs`, `apps-access.test.mjs`, `apps-roster-swipe.mjs`, `apps-roster-swipe.test.mjs`. Same Firebase project and auth domain as grocery/habits. Does not import grocery, habits, or portfolio files. User-facing title: **Micro Apps** (`<title>` and signed-in heading).
 
 ### Data model
 
@@ -138,7 +148,7 @@ Files: `apps.html`, `apps.css`, `apps.js`, `apps-config.js`, `apps-access.mjs`, 
 
 ### UI
 
-Follow [Shared app chrome](#shared-app-chrome-apps-grocery-habits). Title row with **user coin** only (no hamburger). Non-admins with an access doc see launcher links for granted apps. Admins also see **People & access** (invite by email, toggle apps, remove). Signed-in users without an access doc see 404 (same pattern on grocery/habits when the app is missing from `apps`).
+Follow [Shared app chrome](#shared-app-chrome-apps-grocery-habits). Title row with **user coin** only (no hamburger). Non-admins with an access doc see launcher links for granted apps. Admins also see **People & access** (invite by email, toggle app checkboxes). Removing an invite uses [swipe-to-delete rows](#swipe-to-delete-rows) on `#roster` — no visible Remove button. Signed-in users without an access doc see 404 (same pattern on grocery/habits when the app is missing from `apps`).
 
 Access helpers live in `apps-access.mjs` (`normalizeEmail`, `hasApp`, `sessionView`, `bindUidWrite`, `inviteUpsertFields`, `appsLauncherLinks`, `isAdminUser`, etc.).
 
@@ -171,7 +181,7 @@ Open `http://localhost:8000/grocery.html`, `http://localhost:8000/habits.html`, 
 Pure helper tests:
 
 ```bash
-node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs grocery-prefs.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs
+node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs grocery-prefs.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs apps-roster-swipe.test.mjs
 ```
 
 After access or habits rule changes, copy `firestore.rules` into the Firebase console and publish (same as grocery).

@@ -10,6 +10,7 @@
   --accent-hover: #0d4f7a;
   --on-accent: #ffffff;
   --danger: #8b1e1e;
+  --danger-hover: #a02424;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.06);
   --radius: 8px;
   --max-width: 40rem;
@@ -32,6 +33,7 @@
   --accent-hover: #8ec8ea;
   --on-accent: #000000;
   --danger: #f08080;
+  --danger-hover: #f5a0a0;
   --shadow: 0 1px 2px rgba(255, 255, 255, 0.06),
     0 4px 12px rgba(0, 0, 0, 0.5);
 }
@@ -476,22 +478,100 @@ body {
 }
 
 .roster {
+  --roster-swipe-w: 3.25rem;
   display: grid;
-  gap: 0.75rem;
+  gap: 0;
 }
 
 .roster__row {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.75rem 0;
+  position: relative;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  touch-action: pan-y;
   border-bottom: 1px solid var(--rule);
 }
 
+.roster__row:last-child {
+  border-bottom: none;
+}
+
+.roster__reveal {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: var(--roster-swipe-w);
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  transform: translateX(100%);
+  pointer-events: none;
+}
+
+.roster__row.is-swiping .roster__reveal,
+.roster__row.is-revealed .roster__reveal {
+  transform: none;
+  pointer-events: auto;
+}
+
+.roster__delete {
+  appearance: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--danger);
+  color: #ffffff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.roster__delete:hover,
+.roster__delete:focus-visible {
+  background: var(--danger-hover);
+  outline: none;
+}
+
+.roster__delete-icon {
+  display: block;
+  width: 1.15rem;
+  height: 1.15rem;
+  pointer-events: none;
+}
+
+.roster__front {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  background: var(--surface);
+  transition: transform 160ms ease;
+  will-change: transform;
+}
+
 @media (min-width: 36rem) {
-  .roster__row {
-    grid-template-columns: 1fr auto auto;
+  .roster__front {
+    grid-template-columns: 1fr auto;
     align-items: center;
+    gap: 0.75rem;
   }
+}
+
+.roster__row.is-swiping .roster__front {
+  transition: none;
+}
+
+.roster__row.is-revealed .roster__front {
+  transform: translateX(calc(-1 * var(--roster-swipe-w)));
+}
+
+.roster__apps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
 }
 
 @media (max-width: 720px) {

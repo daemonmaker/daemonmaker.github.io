@@ -36,6 +36,12 @@ import {
   userCoinLetter,
   parseThemePref,
 } from "./apps-access.mjs";
+import {
+  trashIconSvg,
+  bindRosterRowSwipe,
+  syncRosterSwipePresentation,
+  closeOpenRosterSwipe,
+} from "./apps-roster-swipe.mjs";
 
 const THEME_KEY = "apps_theme";
 const OAUTH_NONCE_KEY = "apps_google_oauth_nonce";
@@ -82,6 +88,15 @@ const state = {
   seedAdmin: false,
   isAdmin: false,
   roster: [],
+  openSwipeEmailKey: null,
+};
+
+const rosterSwipeCtx = {
+  rosterEl,
+  getOpenKey: () => state.openSwipeEmailKey,
+  setOpenKey: (key) => {
+    state.openSwipeEmailKey = key;
+  },
 };
 
 const unsubscribers = [];
@@ -421,12 +436,34 @@ function renderLauncher() {
 }
 
 function renderRoster() {
+  const openKey = state.openSwipeEmailKey;
   rosterEl.textContent = "";
   const rows = adminRosterSort(state.roster);
+  const stillOpen = openKey && rows.some((r) => r.id === openKey);
+  state.openSwipeEmailKey = stillOpen ? openKey : null;
+
   for (const row of rows) {
     const wrap = document.createElement("div");
     wrap.className = "roster__row";
     wrap.dataset.emailKey = row.id;
+
+    const reveal = document.createElement("div");
+    reveal.className = "roster__reveal";
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "roster__delete";
+    deleteBtn.setAttribute(
+      "aria-label",
+      `Remove ${row.email || row.id}`,
+    );
+    deleteBtn.appendChild(trashIconSvg());
+    deleteBtn.addEventListener("click", () => {
+      void removeInvite(row.id);
+    });
+    reveal.appendChild(deleteBtn);
+
+    const front = document.createElement("div");
+    front.className = "roster__front";
 
     const emailCol = document.createElement("div");
     const emailP = document.createElement("p");
@@ -454,17 +491,10 @@ function renderRoster() {
       appsCol.appendChild(label);
     }
 
-    const actions = document.createElement("div");
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "btn btn--ghost btn--danger";
-    del.textContent = "Remove";
-    del.addEventListener("click", () => {
-      void removeInvite(row.id);
-    });
-    actions.appendChild(del);
-
-    wrap.append(emailCol, appsCol, actions);
+    front.append(emailCol, appsCol);
+    wrap.append(reveal, front);
+    bindRosterRowSwipe(front, row.id, rosterSwipeCtx);
+    syncRosterSwipePresentation(wrap, row.id, state.openSwipeEmailKey);
     rosterEl.appendChild(wrap);
   }
 }
@@ -486,6 +516,9 @@ async function saveRosterApps(emailKey, appsCol) {
 
 async function removeInvite(emailKey) {
   setAppMessage("");
+  if (state.openSwipeEmailKey === emailKey) {
+    state.openSwipeEmailKey = null;
+  }
   try {
     await deleteDoc(doc(db, "access", emailKey));
   } catch (error) {
@@ -667,11 +700,15 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".user-menu")) {
     closeUserMenu();
   }
+  if (!event.target.closest(".roster__row")) {
+    closeOpenRosterSwipe(rosterSwipeCtx);
+  }
 });
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeUserMenu();
+    closeOpenRosterSwipe(rosterSwipeCtx);
   }
 });
 
