@@ -256,30 +256,60 @@
           <main class="main" aria-live="polite">
             <header class="main__header">
               <div class="main__title-row">
-                <h2 id="active-list-name" class="main__title"></h2>
+                <h2 class="visually-hidden">Active list</h2>
+                <div id="list-title-region" class="main__title-region"></div>
                 <span id="default-badge" class="badge" hidden
                   >Default for everyone</span
                 >
               </div>
-              <div class="main__actions">
-                <button id="btn-rename" class="btn btn--ghost" type="button">
-                  Rename
-                </button>
+              <div class="list-menu">
                 <button
-                  id="btn-set-default"
-                  class="btn btn--ghost"
                   type="button"
+                  id="btn-list-menu"
+                  class="icon-btn icon-btn--menu"
+                  aria-expanded="false"
+                  aria-controls="list-menu-panel"
+                  aria-label="List options"
+                >
+                  <span class="icon-btn__bars" aria-hidden="true"></span>
+                </button>
+                <div
+                  id="list-menu-panel"
+                  class="menu-panel list-menu__panel"
                   hidden
                 >
-                  Set as default
-                </button>
-                <button
-                  id="btn-delete-list"
-                  class="btn btn--danger"
-                  type="button"
-                >
-                  Delete list
-                </button>
+                  <fieldset class="list-menu__group">
+                    <legend class="list-menu__legend">Sort</legend>
+                    <label class="list-menu__option">
+                      <input
+                        type="radio"
+                        name="item-sort"
+                        value="name"
+                        checked
+                      />
+                      Name
+                    </label>
+                    <label class="list-menu__option">
+                      <input type="radio" name="item-sort" value="checked" />
+                      Checked
+                    </label>
+                  </fieldset>
+                  <button
+                    id="btn-set-default"
+                    class="btn btn--ghost btn--block"
+                    type="button"
+                    hidden
+                  >
+                    Set as default
+                  </button>
+                  <button
+                    id="btn-delete-list"
+                    class="btn btn--danger btn--block"
+                    type="button"
+                  >
+                    Delete list
+                  </button>
+                </div>
               </div>
             </header>
 
@@ -296,14 +326,6 @@
               />
               <button class="btn btn--primary" type="submit">Add</button>
             </form>
-
-            <div class="item-sort">
-              <label for="item-sort">Sort</label>
-              <select id="item-sort">
-                <option value="name" selected>Name</option>
-                <option value="checked">Checked</option>
-              </select>
-            </div>
 
             <ul id="items" class="items"></ul>
             <p id="items-empty" class="items-empty" hidden>No items yet.</p>

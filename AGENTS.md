@@ -13,6 +13,30 @@ Plain files only. No build, no npm, no framework, no bundler.
 
 `index.html` stays short and self-contained. Do not add employer or project names, metrics, `mailto:` links, or GitHub links. Headshot is `assets/headshot.jpg`.
 
+## Shared app chrome (apps, grocery, habits)
+
+The three Firebase apps share one tight, menu-driven chrome. Keep them aligned; do not reintroduce sprawling header toolbars, separate theme pages, or loose card-heavy layouts.
+
+### Density and look
+
+- Tight UI: compact padding and controls (`--text-base: 15px`, small `--btn-pad-*` / `--input-pad-*`, short nav rows, modest `--coin-size`). Prefer denser rows over card stacks and always-visible action strips.
+- Light mode is black text on white; dark mode is white on black. Flat surfaces; avoid heavy multi-layer chrome.
+- Keep `[hidden] { display: none !important; }` in each app CSS (`.login { display: grid }` otherwise overrides HTML `hidden` and looks like a login loop).
+
+### Theme
+
+- Modes: `system` | `light` | `dark`. `system` follows `prefers-color-scheme`.
+- Per-app `localStorage` keys: `apps_theme`, `grocery_theme`, `habits_theme`.
+- Inline head script sets `data-apps-theme` / `data-grocery-theme` / `data-habits-theme` on `<html>` before CSS loads to avoid a flash.
+- Login: System / Light / Dark buttons before sign-in.
+- Signed-in: theme radios live in the user-coin account menu (`.theme-controls.theme-controls--menu`).
+
+### Menus
+
+- **User coin** (initial via `userCoinLetter`): opens the account menu — display name, theme radios, Sign out. Grocery and habits also link back to `apps.html` ("Micro Apps"). Close on outside click / Escape.
+- **Hamburger** (`.icon-btn--menu` with `.icon-btn__bars`): contextual options for the active entity. Grocery: list menu (set default, delete). Habits: habit menu (layout, range, delete). Apps launcher has the coin only (no hamburger).
+- Put contextual actions in these menus, not as always-visible header button rows. When an app has both menus, only one panel should be open at a time.
+
 ## Grocery app
 
 Files: `grocery.html`, `grocery.css`, `grocery.js`, `grocery-config.js`, `grocery-items.mjs`, `grocery-meals.mjs`, `grocery-meal-editor.mjs`, `firestore.rules`, `firestore.indexes.json`.
@@ -65,17 +89,13 @@ Do not switch sign-in back to any of these. Each one fails on this host:
 
 `__/auth/` and `__/firebase/init.json` are leftover same-origin handler files. `.nojekyll` must stay so Jekyll does not ignore `__`. GitHub Pages serves extensionless files as `application/octet-stream`, which is why the handler and iframe live at `__/auth/handler/index.html` and `__/auth/iframe/index.html`. They are not the active sign-in path.
 
+### UI
+
+Follow [Shared app chrome](#shared-app-chrome-apps-grocery-habits). Sidebar list nav with user coin; active-list **hamburger** for set-default / delete. List title uses the same inline rename pattern as item names (click title to edit).
+
 ### CSS
 
-Keep this rule in `grocery.css`:
-
-```css
-[hidden] {
-  display: none !important;
-}
-```
-
-`.login { display: grid }` overrides the HTML `hidden` attribute. Without the `!important` rule, a successful sign-in still shows the login card and looks like a login loop. The signed-in shell is on the page underneath.
+Keep `[hidden] { display: none !important; }` in `grocery.css` as required by Shared app chrome (login grid vs signed-in shell).
 
 ## Habits app
 
@@ -87,9 +107,9 @@ Files: `habits.html`, `habits.css`, `habits.js`, `habits-config.js`, `habits-gri
 
 ### UI
 
-Dot grid per habit: **Week grid** (7 columns, week starts Sunday) or **Wrapping row**. **Rolling year** (last 365 days through today, dots in reverse chronological order so today is at the top) or **Calendar year** (current year with leading padding; future days muted and not togglable). Per-habit done/undone/today-outline colors via color pickers (defaults green / grey / blue ring on today’s dot). Layout, range, and theme prefs in `localStorage` (`habits_layout`, `habits_range`, `habits_theme` as `system` | `light` | `dark`). Light mode is black text on white; dark mode is white on black. `system` uses `prefers-color-scheme`. Inline script in `habits.html` sets `data-habits-theme` on `<html>` before CSS loads to avoid a flash.
+Follow [Shared app chrome](#shared-app-chrome-apps-grocery-habits). Dot grid per habit: **Week grid** (7 columns, week starts Sunday) or **Wrapping row**. **Rolling year** (last 365 days through today, dots in reverse chronological order so today is at the top) or **Calendar year** (current year with leading padding; future days muted and not togglable). Per-habit done/undone/today-outline colors via color pickers (defaults green / grey / blue ring on today’s dot). Layout and range prefs in `localStorage` (`habits_layout`, `habits_range`); theme uses `habits_theme` per Shared app chrome.
 
-Sidebar **My Habits** title with **user coin** (initial) on the right opening account menu (name, theme, sign out). Active-habit **hamburger** opens layout, range, and delete. Sidebar habit list scrolls (~3 rows visible); **+** creates a habit. Login page has theme buttons before sign-in.
+Sidebar **My Habits** with **user coin**; active-habit **hamburger** for layout, range, and delete. Sidebar habit list scrolls (~3 rows visible); **+** creates a habit.
 
 Date layout helpers live in `habits-grid.mjs` (`toDateKey`, `rollingDays`, `calendarYearDays`, `weekGridCells`, `wrapSequence`, `dayKeysForRange`). Done-state and UI prefs helpers live in `habits-state.mjs` (`doneDayKeysForHabit`, `isDayDoneForHabit`, `reconcilePendingDoneKeys`, `userCoinLetter`, `parseThemePref`, `parseLayoutPref`, `parseRangePref`).
 
@@ -105,7 +125,7 @@ Register those redirect URIs on the same Google OAuth web client as grocery.
 
 ### CSS
 
-Keep the same `[hidden] { display: none !important; }` rule in `habits.css` as grocery (login grid vs signed-in shell).
+Keep `[hidden] { display: none !important; }` in `habits.css` as required by Shared app chrome (login grid vs signed-in shell).
 
 ## Apps launcher
 
@@ -118,7 +138,7 @@ Files: `apps.html`, `apps.css`, `apps.js`, `apps-config.js`, `apps-access.mjs`, 
 
 ### UI
 
-Non-admins with an access doc see launcher links for granted apps. Admins also see **People & access** (invite by email, toggle apps, remove). Signed-in users without an access doc see 404 (same pattern on grocery/habits when the app is missing from `apps`).
+Follow [Shared app chrome](#shared-app-chrome-apps-grocery-habits). Title row with **user coin** only (no hamburger). Non-admins with an access doc see launcher links for granted apps. Admins also see **People & access** (invite by email, toggle apps, remove). Signed-in users without an access doc see 404 (same pattern on grocery/habits when the app is missing from `apps`).
 
 Access helpers live in `apps-access.mjs` (`normalizeEmail`, `hasApp`, `sessionView`, `bindUidWrite`, `inviteUpsertFields`, `appsLauncherLinks`, `isAdminUser`, etc.).
 
@@ -134,7 +154,7 @@ Register those redirect URIs on the same Google OAuth web client as grocery.
 
 ### CSS
 
-Keep the same `[hidden] { display: none !important; }` rule in `apps.css` as grocery (login grid vs signed-in shell).
+Keep `[hidden] { display: none !important; }` in `apps.css` as required by Shared app chrome (login grid vs signed-in shell).
 
 ### Deploy order (access rules)
 

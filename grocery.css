@@ -603,12 +603,52 @@ body {
   align-items: center;
   gap: 0.5rem 0.75rem;
   min-width: 0;
+  flex: 1;
 }
 
-.main__title {
-  margin: 0;
+.main__title-region {
   font-size: 1.15rem;
+  font-weight: 700;
   line-height: 1.25;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.list-title__button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  padding: 0.15rem 0.25rem;
+  margin: -0.15rem -0.25rem;
+  border-radius: 6px;
+  text-align: left;
+  max-width: 100%;
+}
+
+.list-title__button:hover,
+.list-title__button:focus-visible {
+  background: var(--nav-hover);
+  outline: none;
+}
+
+.list-title__input {
+  font: inherit;
+  font-weight: inherit;
+  font-size: inherit;
+  width: 100%;
+  max-width: 20rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.list-title__input:focus {
+  outline: none;
 }
 
 .badge {
@@ -622,10 +662,109 @@ body {
   padding: 0.2rem 0.55rem;
 }
 
-.main__actions {
+.list-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  appearance: none;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0.3rem 0.4rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover,
+.icon-btn:focus-visible {
+  background: var(--nav-hover);
+  outline: none;
+}
+
+.icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.icon-btn:disabled:hover,
+.icon-btn:disabled:focus-visible {
+  background: transparent;
+}
+
+.icon-btn__bars,
+.icon-btn__bars::before,
+.icon-btn__bars::after {
+  display: block;
+  width: 1.1rem;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.icon-btn__bars {
+  position: relative;
+}
+
+.icon-btn__bars::before,
+.icon-btn__bars::after {
+  content: "";
+  position: absolute;
+  left: 0;
+}
+
+.icon-btn__bars::before {
+  top: -5px;
+}
+
+.icon-btn__bars::after {
+  top: 5px;
+}
+
+.list-menu__panel {
+  min-width: 11rem;
+}
+
+.list-menu__group {
+  border: none;
+  margin: 0 0 0.45rem;
+  padding: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.175rem;
+}
+
+.list-menu__legend {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 0;
+  margin: 0 0 0.15rem;
+}
+
+.list-menu__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.list-menu__panel .btn--block {
+  margin-top: 0;
+}
+
+.list-menu__panel .btn--block + .btn--block {
+  margin-top: 0.25rem;
 }
 
 .add-form {
@@ -650,28 +789,8 @@ body {
   outline-offset: 1px;
 }
 
-.item-sort {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.item-sort select {
-  font: inherit;
-  font-size: 0.9rem;
-  padding: var(--input-pad-y) var(--input-pad-x);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--bg);
-}
-
-.item-sort select:focus {
-  outline: 2px solid rgba(10, 58, 90, 0.35);
-  outline-offset: 1px;
-}
-
 .items {
+  --items-swipe-w: 3.25rem;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -686,8 +805,80 @@ body {
   border-bottom: 1px solid var(--rule);
 }
 
-.items__row:last-child {
+.items > .items__row {
+  position: relative;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.items > .items__row:last-child {
   border-bottom: none;
+}
+
+.items__reveal {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: var(--items-swipe-w);
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  transform: translateX(100%);
+  pointer-events: none;
+}
+
+.items__row.is-swiping .items__reveal,
+.items__row.is-revealed .items__reveal {
+  transform: none;
+  pointer-events: auto;
+}
+
+.items__delete {
+  appearance: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--danger);
+  color: #ffffff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.items__delete:hover,
+.items__delete:focus-visible {
+  background: var(--danger-hover);
+  outline: none;
+}
+
+.items__delete-icon {
+  display: block;
+  width: 1.15rem;
+  height: 1.15rem;
+  pointer-events: none;
+}
+
+.items__front {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.325rem 0;
+  background: var(--surface);
+  transition: transform 160ms ease;
+  will-change: transform;
+}
+
+.items__row.is-swiping .items__front {
+  transition: none;
+}
+
+.items__row.is-revealed .items__front {
+  transform: translateX(calc(-1 * var(--items-swipe-w)));
 }
 
 .items__check {
@@ -920,10 +1111,6 @@ body {
 @media (max-width: 720px) {
   .shell__body {
     grid-template-columns: 1fr;
-  }
-
-  .main__actions {
-    width: 100%;
   }
 
   .add-form {

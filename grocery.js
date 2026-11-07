@@ -96,16 +96,21 @@ const panelGrocery = document.getElementById("panel-grocery");
 const panelMeals = document.getElementById("panel-meals");
 const listSharedEl = document.getElementById("list-shared");
 const listPersonalEl = document.getElementById("list-personal");
-const activeListNameEl = document.getElementById("active-list-name");
+const listTitleRegion = document.getElementById("list-title-region");
 const defaultBadgeEl = document.getElementById("default-badge");
+const btnListMenu = document.getElementById("btn-list-menu");
+const listMenuPanel = document.getElementById("list-menu-panel");
 const itemsEl = document.getElementById("items");
 const itemsEmptyEl = document.getElementById("items-empty");
 const btnSetDefault = document.getElementById("btn-set-default");
+const btnDeleteList = document.getElementById("btn-delete-list");
 const formAddItem = document.getElementById("form-add-item");
 const inputItem = document.getElementById("input-item");
-const itemSortEl = document.getElementById("item-sort");
+const itemSortRadios = document.querySelectorAll('input[name="item-sort"]');
 const listMealsSharedEl = document.getElementById("list-meals-shared");
 const listMealsPersonalEl = document.getElementById("list-meals-personal");
+const ITEMS_SWIPE_WIDTH_PX = 52;
+const ITEMS_SWIPE_OPEN_THRESHOLD_PX = 28;
 const mealDialog = document.getElementById("meal-dialog");
 const mealDialogTitleRegion = document.getElementById("meal-dialog-title-region");
 const mealDialogMessage = document.getElementById("meal-dialog-message");
@@ -131,7 +136,10 @@ const state = {
   items: [],
   editingItemId: null,
   pendingItemRenames: {},
+  editingListName: false,
+  pendingListName: null,
   itemSort: "name",
+  openSwipeItemId: null,
   ready: false,
   mealDialogMealId: null,
   mealDialogMealItems: [],
@@ -151,6 +159,7 @@ const unsubscribers = [];
 const itemRenameSkipBlur = new Set();
 const mealEditorRenameSkipBlur = new Set();
 const mealDialogRenameSkipBlur = new Set();
+const listTitleRenameSkipBlur = new Set();
 let itemsUnsub = null;
 let mealEditorItemsUnsub = null;
 let mealDialogItemsUnsub = null;
@@ -225,14 +234,40 @@ function closeUserMenu() {
   btnUserMenu?.setAttribute("aria-expanded", "false");
 }
 
-function toggleUserMenu() {
-  const willOpen = userMenuPanel.hidden;
-  if (willOpen) {
-    userMenuPanel.hidden = false;
-    btnUserMenu.setAttribute("aria-expanded", "true");
-  } else {
-    closeUserMenu();
+function closeListMenu() {
+  if (!listMenuPanel) {
+    return;
   }
+  listMenuPanel.hidden = true;
+  btnListMenu?.setAttribute("aria-expanded", "false");
+}
+
+function closeAllMenus() {
+  closeUserMenu();
+  closeListMenu();
+}
+
+function toggleUserMenu() {
+  const willOpen = Boolean(userMenuPanel?.hidden);
+  closeAllMenus();
+  if (willOpen && userMenuPanel) {
+    userMenuPanel.hidden = false;
+    btnUserMenu?.setAttribute("aria-expanded", "true");
+  }
+}
+
+function toggleListMenu() {
+  const willOpen = Boolean(listMenuPanel?.hidden);
+  closeAllMenus();
+  if (willOpen && listMenuPanel) {
+    listMenuPanel.hidden = false;
+    btnListMenu?.setAttribute("aria-expanded", "true");
+  }
+}
+
+function clearListNameEdit() {
+  state.editingListName = false;
+  state.pendingListName = null;
 }
 
 function hideAllViews() {
@@ -467,6 +502,11 @@ function renderListNav(container, lists, emptyLabel) {
     }
 
     button.addEventListener("click", () => {
+      if (state.activeListId !== list.id) {
+        clearListNameEdit();
+        closeListMenu();
+        closeOpenItemSwipe({ animate: false });
+      }
       state.activeListId = list.id;
       renderAll();
       subscribeItems();
@@ -1361,6 +1401,7 @@ function itemNameInputClass(checked) {
 }
 
 function startItemNameEdit(itemId) {
+  closeOpenItemSwipe();
   state.editingItemId = itemId;
   renderItems();
   const input = itemsEl.querySelector(`input.items__name-input[data-item-id="${itemId}"]`);
@@ -1467,24 +1508,228 @@ function bindItemNameInput(input, itemId) {
   });
 }
 
+function trashIconSvg() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "items__delete-icon");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("fill", "currentColor");
+  path.setAttribute(
+    "d",
+    "M9 3h6l1 2h5v2H3V5h5l1-2zm1 6h2v10h-2V9zm4 0h2v10h-2V9zM7 9h2v10H7V9zm-1 13h12a1 1 0 0 0 1-1V7H5v14a1 1 0 0 0 1 1z",
+  );
+  svg.appendChild(path);
+  return svg;
+}
+
+function setItemSwipeOffset(li, offsetPx, { animate = true } = {}) {
+  const front = li.querySelector(".items__front");
+  if (!front) {
+    return;
+  }
+  li.classList.toggle("is-swiping", !animate);
+  front.style.transform =
+    offsetPx === 0 ? "" : `translateX(${offsetPx}px)`;
+}
+
+function syncItemSwipePresentation(li, itemId) {
+  const front = li.querySelector(".items__front");
+  if (!front) {
+    return;
+  }
+  const open = state.openSwipeItemId === itemId;
+  li.classList.toggle("is-revealed", open);
+  li.classList.remove("is-swiping");
+  front.style.transform = open ? `translateX(${-ITEMS_SWIPE_WIDTH_PX}px)` : "";
+}
+
+function closeOpenItemSwipe({ animate = true } = {}) {
+  if (!state.openSwipeItemId) {
+    return;
+  }
+  const openLi = itemsEl.querySelector(
+    `li[data-item-id="${state.openSwipeItemId}"]`,
+  );
+  state.openSwipeItemId = null;
+  if (openLi) {
+    openLi.classList.remove("is-revealed");
+    setItemSwipeOffset(openLi, 0, { animate });
+    if (!animate) {
+      openLi.classList.remove("is-swiping");
+    }
+  }
+}
+
+function openItemSwipe(itemId) {
+  if (state.openSwipeItemId && state.openSwipeItemId !== itemId) {
+    closeOpenItemSwipe();
+  }
+  const li = itemsEl.querySelector(`li[data-item-id="${itemId}"]`);
+  if (!li) {
+    return;
+  }
+  state.openSwipeItemId = itemId;
+  li.classList.add("is-revealed");
+  li.classList.remove("is-swiping");
+  setItemSwipeOffset(li, -ITEMS_SWIPE_WIDTH_PX);
+}
+
+function bindItemSwipe(front, itemId) {
+  if (front.dataset.swipeBound === "true") {
+    return;
+  }
+  front.dataset.swipeBound = "true";
+
+  let pointerId = null;
+  let startX = 0;
+  let startY = 0;
+  let startOffset = 0;
+  let axis = null;
+  let dragging = false;
+  let moved = false;
+
+  front.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    if (event.target.closest(".items__check, .items__name-input")) {
+      return;
+    }
+    const li = front.closest(".items__row");
+    if (!li) {
+      return;
+    }
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    startOffset =
+      state.openSwipeItemId === itemId ? -ITEMS_SWIPE_WIDTH_PX : 0;
+    axis = null;
+    dragging = true;
+    moved = false;
+    front.setPointerCapture(pointerId);
+  });
+
+  front.addEventListener("pointermove", (event) => {
+    if (!dragging || event.pointerId !== pointerId) {
+      return;
+    }
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    if (!axis) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) {
+        return;
+      }
+      axis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+      if (axis === "y") {
+        dragging = false;
+        try {
+          front.releasePointerCapture(pointerId);
+        } catch {
+          /* already released */
+        }
+        return;
+      }
+      if (state.openSwipeItemId && state.openSwipeItemId !== itemId) {
+        closeOpenItemSwipe({ animate: false });
+      }
+    }
+    if (axis !== "x") {
+      return;
+    }
+    event.preventDefault();
+    moved = true;
+    const next = Math.min(0, Math.max(-ITEMS_SWIPE_WIDTH_PX, startOffset + dx));
+    const li = front.closest(".items__row");
+    if (li) {
+      li.classList.remove("is-revealed");
+      setItemSwipeOffset(li, next, { animate: false });
+    }
+  });
+
+  function endSwipe(event) {
+    if (!dragging || event.pointerId !== pointerId) {
+      return;
+    }
+    dragging = false;
+    const li = front.closest(".items__row");
+    if (!li || axis !== "x") {
+      pointerId = null;
+      axis = null;
+      return;
+    }
+    const dx = event.clientX - startX;
+    const next = Math.min(0, Math.max(-ITEMS_SWIPE_WIDTH_PX, startOffset + dx));
+    const shouldOpen =
+      next <= -ITEMS_SWIPE_OPEN_THRESHOLD_PX ||
+      (startOffset < 0 && next < startOffset);
+    if (shouldOpen) {
+      openItemSwipe(itemId);
+    } else {
+      if (state.openSwipeItemId === itemId) {
+        state.openSwipeItemId = null;
+      }
+      li.classList.remove("is-revealed");
+      setItemSwipeOffset(li, 0);
+    }
+    pointerId = null;
+    axis = null;
+  }
+
+  front.addEventListener("pointerup", endSwipe);
+  front.addEventListener("pointercancel", endSwipe);
+
+  front.addEventListener(
+    "click",
+    (event) => {
+      if (moved) {
+        event.preventDefault();
+        event.stopPropagation();
+        moved = false;
+      }
+    },
+    true,
+  );
+}
+
 function ensureItemRowControls(li, item) {
-  let check = li.querySelector(".items__check");
+  let reveal = li.querySelector(".items__reveal");
+  if (!reveal) {
+    reveal = document.createElement("div");
+    reveal.className = "items__reveal";
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "items__delete";
+    deleteBtn.setAttribute("aria-label", `Delete ${item.name}`);
+    deleteBtn.appendChild(trashIconSvg());
+    deleteBtn.addEventListener("click", () => {
+      void removeItem(item.id);
+    });
+    reveal.appendChild(deleteBtn);
+    li.appendChild(reveal);
+  } else {
+    const deleteBtn = reveal.querySelector(".items__delete");
+    if (deleteBtn) {
+      deleteBtn.setAttribute("aria-label", `Delete ${item.name}`);
+    }
+  }
+
+  let front = li.querySelector(".items__front");
+  if (!front) {
+    front = document.createElement("div");
+    front.className = "items__front";
+    li.appendChild(front);
+  }
+  bindItemSwipe(front, item.id);
+
+  let check = front.querySelector(".items__check");
   if (!check) {
     check = document.createElement("input");
     check.type = "checkbox";
     check.className = "items__check";
     check.addEventListener("change", () => toggleItem(item.id));
-    li.appendChild(check);
-  }
-
-  let removeBtn = li.querySelector(".items__remove");
-  if (!removeBtn) {
-    removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "btn btn--ghost items__remove";
-    removeBtn.textContent = "Remove";
-    removeBtn.addEventListener("click", () => removeItem(item.id));
-    li.appendChild(removeBtn);
+    front.appendChild(check);
   }
 }
 
@@ -1519,15 +1764,16 @@ function renderItems() {
     }
 
     ensureItemRowControls(li, item);
+    const front = li.querySelector(".items__front");
 
-    const check = li.querySelector(".items__check");
+    const check = front.querySelector(".items__check");
     if (document.activeElement !== check) {
       check.checked = checked;
       check.setAttribute("aria-label", displayName);
     }
 
-    let nameBtn = li.querySelector("button.items__name");
-    let nameInput = li.querySelector("input.items__name-input");
+    let nameBtn = front.querySelector("button.items__name");
+    let nameInput = front.querySelector("input.items__name-input");
 
     if (isEditing) {
       if (nameBtn) {
@@ -1542,10 +1788,7 @@ function renderItems() {
         nameInput.setAttribute("aria-label", "Item name");
         nameInput.value = displayName;
         bindItemNameInput(nameInput, item.id);
-        const removeBtn = li.querySelector(".items__remove");
-        li.insertBefore(nameInput, removeBtn);
-      } else if (document.activeElement !== nameInput) {
-        nameInput.className = itemNameInputClass(checked);
+        front.appendChild(nameInput);
       } else {
         nameInput.className = itemNameInputClass(checked);
       }
@@ -1558,16 +1801,20 @@ function renderItems() {
         nameBtn = document.createElement("button");
         nameBtn.type = "button";
         nameBtn.addEventListener("click", () => startItemNameEdit(item.id));
-        const removeBtn = li.querySelector(".items__remove");
-        li.insertBefore(nameBtn, removeBtn);
+        front.appendChild(nameBtn);
       }
       nameBtn.className = itemNameButtonClass(checked);
       nameBtn.textContent = displayName;
     }
+
+    syncItemSwipePresentation(li, item.id);
   }
 
   for (const [itemId, li] of existingById) {
     if (!nextIds.has(itemId)) {
+      if (state.openSwipeItemId === itemId) {
+        state.openSwipeItemId = null;
+      }
       li.remove();
     }
   }
@@ -1582,32 +1829,144 @@ function renderItems() {
   }
 }
 
-function renderToolbar() {
+function listTitleDisplay(list) {
+  if (typeof state.pendingListName === "string") {
+    return state.pendingListName;
+  }
+  return list.name;
+}
+
+function startListNameEdit() {
   const active = getListById(state.activeListId);
   if (!active) {
-    activeListNameEl.textContent = "";
-    defaultBadgeEl.hidden = true;
-    btnSetDefault.hidden = true;
-    btnSetDefault.disabled = true;
-    document.getElementById("btn-rename").disabled = true;
-    document.getElementById("btn-delete-list").disabled = true;
-    formAddItem.querySelector("button").disabled = true;
-    inputItem.disabled = true;
-    itemSortEl.disabled = true;
+    return;
+  }
+  closeListMenu();
+  state.editingListName = true;
+  renderListTitle();
+}
+
+function cancelListNameEdit() {
+  const active = getListById(state.activeListId);
+  if (active) {
+    listTitleRenameSkipBlur.add(active.id);
+  }
+  state.editingListName = false;
+  renderListTitle();
+}
+
+async function commitListNameEdit(raw) {
+  const active = getListById(state.activeListId);
+  if (!active) {
+    clearListNameEdit();
+    renderListTitle();
     return;
   }
 
-  activeListNameEl.textContent = active.name;
+  const name = String(raw).trim();
+  state.editingListName = false;
+
+  if (name === "") {
+    setAppMessage("List name cannot be empty.");
+    renderListTitle();
+    return;
+  }
+  if (name === active.name) {
+    setAppMessage("");
+    renderListTitle();
+    return;
+  }
+
+  state.pendingListName = name;
+  renderListTitle();
+  setAppMessage("");
+
+  try {
+    await updateDoc(doc(db, "lists", active.id), {
+      name,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    state.pendingListName = null;
+    setAppMessage(error.message || "Could not rename list.");
+    renderListTitle();
+  }
+}
+
+function renderListTitle() {
+  const active = getListById(state.activeListId);
+  if (!active) {
+    clearListNameEdit();
+    listTitleRegion.replaceChildren();
+    defaultBadgeEl.hidden = true;
+    btnSetDefault.hidden = true;
+    btnSetDefault.disabled = true;
+    btnDeleteList.disabled = true;
+    btnListMenu.disabled = true;
+    closeListMenu();
+    formAddItem.querySelector("button").disabled = true;
+    inputItem.disabled = true;
+    for (const radio of itemSortRadios) {
+      radio.disabled = true;
+    }
+    return;
+  }
+
+  if (state.pendingListName === active.name) {
+    state.pendingListName = null;
+  }
+
   const isDefault =
     active.scope === "shared" && active.id === state.defaultListId;
   defaultBadgeEl.hidden = !isDefault;
   btnSetDefault.hidden = active.scope !== "shared";
   btnSetDefault.disabled = isDefault;
-  document.getElementById("btn-rename").disabled = false;
-  document.getElementById("btn-delete-list").disabled = false;
+  btnDeleteList.disabled = false;
+  btnListMenu.disabled = false;
   formAddItem.querySelector("button").disabled = false;
   inputItem.disabled = false;
-  itemSortEl.disabled = false;
+  for (const radio of itemSortRadios) {
+    radio.disabled = false;
+  }
+
+  if (state.editingListName) {
+    let input = listTitleRegion.querySelector("input.list-title__input");
+    if (!input) {
+      listTitleRegion.replaceChildren();
+      input = document.createElement("input");
+      input.type = "text";
+      input.className = "list-title__input";
+      input.value = listTitleDisplay(active);
+      input.setAttribute("aria-label", "List name");
+      bindInlineNameInput(input, {
+        skipBlurSet: listTitleRenameSkipBlur,
+        blurKey: active.id,
+        onCommit: () => {
+          void commitListNameEdit(input.value);
+        },
+        onCancel: () => cancelListNameEdit(),
+      });
+      listTitleRegion.appendChild(input);
+      input.focus();
+      input.select();
+    }
+    return;
+  }
+
+  const existingBtn = listTitleRegion.querySelector("button.list-title__button");
+  const displayName = listTitleDisplay(active);
+  if (existingBtn) {
+    existingBtn.textContent = displayName;
+    return;
+  }
+
+  listTitleRegion.replaceChildren();
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "list-title__button";
+  button.textContent = displayName;
+  button.addEventListener("click", () => startListNameEdit());
+  listTitleRegion.appendChild(button);
 }
 
 function renderAll() {
@@ -1623,7 +1982,7 @@ function renderAll() {
     state.personalMeals,
     "No personal meals yet.",
   );
-  renderToolbar();
+  renderListTitle();
   renderItems();
   renderMealDialog();
 }
@@ -1741,6 +2100,9 @@ function ensureActiveList() {
     return;
   }
 
+  clearListNameEdit();
+  closeListMenu();
+
   if (state.defaultListId && getListById(state.defaultListId)) {
     state.activeListId = state.defaultListId;
   } else if (state.sharedLists.length) {
@@ -1764,12 +2126,14 @@ function subscribeItems() {
     state.items = [];
     state.editingItemId = null;
     state.pendingItemRenames = {};
+    state.openSwipeItemId = null;
     renderItems();
     return;
   }
 
   state.editingItemId = null;
   state.pendingItemRenames = {};
+  state.openSwipeItemId = null;
 
   const itemsQuery = query(
     collection(db, "lists", state.activeListId, "items"),
@@ -2047,25 +2411,11 @@ async function createList(scope) {
   }
 
   const ref = await addDoc(collection(db, "lists"), payload);
+  clearListNameEdit();
+  closeListMenu();
   state.activeListId = ref.id;
   renderAll();
   subscribeItems();
-}
-
-async function renameActiveList() {
-  const active = getListById(state.activeListId);
-  if (!active) {
-    return;
-  }
-  const name = await promptListName("Rename list", active.name);
-  if (!name) {
-    return;
-  }
-  setAppMessage("");
-  await updateDoc(doc(db, "lists", active.id), {
-    name,
-    updatedAt: serverTimestamp(),
-  });
 }
 
 async function deleteActiveList() {
@@ -2081,6 +2431,8 @@ async function deleteActiveList() {
     return;
   }
 
+  closeListMenu();
+  clearListNameEdit();
   setAppMessage("");
 
   const itemsSnap = await getDocs(
@@ -2124,6 +2476,7 @@ async function setGlobalDefault() {
   if (!active || active.scope !== "shared") {
     return;
   }
+  closeListMenu();
   setAppMessage("");
   await setDoc(
     doc(db, "config", "app"),
@@ -2158,6 +2511,17 @@ async function removeItem(itemId) {
   const active = getListById(state.activeListId);
   if (!active) {
     return;
+  }
+  const item = state.items.find((entry) => entry.id === itemId);
+  const label = item?.name ? `"${item.name}"` : "this item";
+  const confirmed = window.confirm(
+    `Remove ${label} from this list? This cannot be undone.`,
+  );
+  if (!confirmed) {
+    return;
+  }
+  if (state.openSwipeItemId === itemId) {
+    state.openSwipeItemId = null;
   }
   setAppMessage("");
   await deleteDoc(doc(db, "lists", active.id, "items", itemId));
@@ -2334,6 +2698,9 @@ function endSession() {
   state.sharedMeals = [];
   state.personalMeals = [];
   state.items = [];
+  clearListNameEdit();
+  closeAllMenus();
+  state.openSwipeItemId = null;
   state.mealDialogMealId = null;
   state.mealDialogMealItems = [];
   state.editingMealId = null;
@@ -2435,11 +2802,7 @@ btnDeleteMeal.addEventListener("click", () => {
   deleteEditingMeal();
 });
 
-document.getElementById("btn-rename").addEventListener("click", () => {
-  renameActiveList();
-});
-
-document.getElementById("btn-delete-list").addEventListener("click", () => {
+btnDeleteList.addEventListener("click", () => {
   deleteActiveList();
 });
 
@@ -2472,10 +2835,25 @@ viewApp.addEventListener("pointerdown", (event) => {
   commitItemNameEdit(state.editingItemId);
 });
 
-itemSortEl.addEventListener("change", () => {
-  state.itemSort = itemSortEl.value;
-  renderItems();
-});
+function syncItemSortRadios() {
+  for (const radio of itemSortRadios) {
+    radio.checked = radio.value === state.itemSort;
+  }
+}
+
+for (const radio of itemSortRadios) {
+  radio.addEventListener("change", () => {
+    if (!radio.checked) {
+      return;
+    }
+    state.itemSort = radio.value === "checked" ? "checked" : "name";
+    closeOpenItemSwipe({ animate: false });
+    syncItemSortRadios();
+    renderItems();
+  });
+}
+
+syncItemSortRadios();
 
 for (const btn of loginThemeButtons) {
   btn.addEventListener("click", () => {
@@ -2497,15 +2875,30 @@ btnUserMenu?.addEventListener("click", (event) => {
   toggleUserMenu();
 });
 
+btnListMenu?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleListMenu();
+});
+
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".user-menu")) {
     closeUserMenu();
+  }
+  if (!event.target.closest(".list-menu")) {
+    closeListMenu();
+  }
+  if (
+    state.openSwipeItemId &&
+    !event.target.closest(`li[data-item-id="${state.openSwipeItemId}"]`)
+  ) {
+    closeOpenItemSwipe();
   }
 });
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    closeUserMenu();
+    closeAllMenus();
+    closeOpenItemSwipe();
   }
 });
 
