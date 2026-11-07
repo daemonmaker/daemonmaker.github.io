@@ -663,17 +663,6 @@ body {
   outline: none;
 }
 
-.badge {
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 600;
-  color: var(--accent);
-  border: 1px solid rgba(10, 58, 90, 0.25);
-  border-radius: 999px;
-  padding: 0.2rem 0.55rem;
-}
-
 .list-menu {
   position: relative;
   flex-shrink: 0;

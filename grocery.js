@@ -101,7 +101,6 @@ const panelMeals = document.getElementById("panel-meals");
 const listSharedEl = document.getElementById("list-shared");
 const listPersonalEl = document.getElementById("list-personal");
 const listTitleRegion = document.getElementById("list-title-region");
-const defaultBadgeEl = document.getElementById("default-badge");
 const btnListMenu = document.getElementById("btn-list-menu");
 const listMenuPanel = document.getElementById("list-menu-panel");
 const itemsEl = document.getElementById("items");
@@ -1928,7 +1927,6 @@ function renderListTitle() {
   if (!active) {
     clearListNameEdit();
     listTitleRegion.replaceChildren();
-    defaultBadgeEl.hidden = true;
     btnSetDefault.hidden = true;
     btnSetDefault.disabled = true;
     btnDeleteList.disabled = true;
@@ -1951,7 +1949,6 @@ function renderListTitle() {
 
   const isDefault =
     active.scope === "shared" && active.id === state.defaultListId;
-  defaultBadgeEl.hidden = !isDefault;
   btnSetDefault.hidden = active.scope !== "shared";
   btnSetDefault.disabled = isDefault;
   btnDeleteList.disabled = false;
