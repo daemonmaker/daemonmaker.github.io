@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Habit tracker</title>
+    <meta name="description" content="Track daily habits." />
+    <link rel="icon" href="data:," />
+    <script>
+      (function () {
+        var theme = localStorage.getItem("habits_theme");
+        if (theme !== "light" && theme !== "dark" && theme !== "system") {
+          theme = "system";
+        }
+        document.documentElement.dataset.habitsTheme = theme;
+      })();
+    </script>
+    <link rel="stylesheet" href="habits.css" />
+    <script>
+      (function () {
+        var hash = location.hash;
+        if (
+          hash &&
+          (hash.indexOf("access_token=") !== -1 ||
+            hash.indexOf("id_token=") !== -1 ||
+            hash.indexOf("error=") !== -1)
+        ) {
+          sessionStorage.setItem("habits_oauth_hash", hash);
+          history.replaceState(null, "", location.pathname + location.search);
+        }
+        Object.keys(sessionStorage).forEach(function (key) {
+          if (key.indexOf("firebase") !== -1) {
+            sessionStorage.removeItem(key);
+          }
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app" class="app">
+      <section id="view-login" class="login" hidden>
+        <div class="login__panel">
+          <p class="login__eyebrow">Tracker</p>
+          <h1 class="login__title">Habits</h1>
+          <p class="login__lead">
+            Sign in with Google to track your personal habits across the year.
+          </p>
+          <div class="login__theme" role="group" aria-label="Theme">
+            <button
+              type="button"
+              class="btn btn--ghost login__theme-btn"
+              data-habits-theme-pick="system"
+            >
+              System
+            </button>
+            <button
+              type="button"
+              class="btn btn--ghost login__theme-btn"
+              data-habits-theme-pick="light"
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              class="btn btn--ghost login__theme-btn"
+              data-habits-theme-pick="dark"
+            >
+              Dark
+            </button>
+          </div>
+          <p id="login-status" class="login__status" hidden></p>
+          <button id="btn-google-sign-in" class="btn btn--primary" type="button">
+            Sign in with Google
+          </button>
+          <p id="login-oauth-hint" class="login__oauth-hint">
+            Authorized redirect URI:
+            <code>https://daemonmaker.github.io/habits.html</code>
+          </p>
+          <p id="login-error" class="message message--error" hidden></p>
+        </div>
+      </section>
+
+      <section id="view-app" class="shell" hidden>
+        <div class="shell__body">
+          <aside class="sidebar" aria-label="Habits">
+            <div class="sidebar__title-row">
+              <h2 class="sidebar__heading">My Habits</h2>
+              <div class="user-menu">
+                <button
+                  type="button"
+                  id="btn-user-menu"
+                  class="user-coin"
+                  aria-haspopup="menu"
+                  aria-expanded="false"
+                  aria-controls="user-menu-panel"
+                >
+                  <span id="user-coin-initial" class="user-coin__initial">?</span>
+                  <span class="visually-hidden">Account menu</span>
+                </button>
+                <div
+                  id="user-menu-panel"
+                  class="menu-panel user-menu__panel"
+                  hidden
+                  role="menu"
+                >
+                  <p id="user-label" class="user-menu__name"></p>
+                  <fieldset class="theme-controls theme-controls--menu">
+                    <legend class="theme-controls__legend">Theme</legend>
+                    <label class="theme-controls__option">
+                      <input
+                        type="radio"
+                        name="habit-theme"
+                        value="system"
+                        checked
+                      />
+                      System
+                    </label>
+                    <label class="theme-controls__option">
+                      <input type="radio" name="habit-theme" value="light" />
+                      Light
+                    </label>
+                    <label class="theme-controls__option">
+                      <input type="radio" name="habit-theme" value="dark" />
+                      Dark
+                    </label>
+                  </fieldset>
+                  <button
+                    id="btn-sign-out"
+                    class="btn btn--ghost btn--block"
+                    type="button"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="sidebar__habits-row">
+              <div class="list-nav__scroll">
+                <ul id="habit-nav" class="list-nav"></ul>
+              </div>
+              <button
+                id="btn-new-habit"
+                class="btn-new-habit"
+                type="button"
+                aria-label="New habit"
+                title="New habit"
+              >
+                +
+              </button>
+            </div>
+          </aside>
+
+          <main id="habit-main" class="main" hidden>
+            <header class="main__header">
+              <div class="main__title-row">
+                <h2 class="visually-hidden">Active habit</h2>
+                <div id="habit-title-region" class="main__title-region"></div>
+              </div>
+              <div class="habit-menu">
+                <button
+                  type="button"
+                  id="btn-habit-menu"
+                  class="icon-btn icon-btn--menu"
+                  aria-expanded="false"
+                  aria-controls="habit-menu-panel"
+                  aria-label="Habit options"
+                >
+                  <span class="icon-btn__bars" aria-hidden="true"></span>
+                </button>
+                <div
+                  id="habit-menu-panel"
+                  class="menu-panel habit-menu__panel"
+                  hidden
+                >
+                  <fieldset class="habit-menu__group">
+                    <legend class="habit-controls__legend">Layout</legend>
+                    <label class="habit-controls__radio">
+                      <input
+                        type="radio"
+                        name="habit-layout"
+                        value="week"
+                        checked
+                      />
+                      Week grid
+                    </label>
+                    <label class="habit-controls__radio">
+                      <input type="radio" name="habit-layout" value="wrap" />
+                      Wrapping row
+                    </label>
+                  </fieldset>
+                  <fieldset class="habit-menu__group">
+                    <legend class="habit-controls__legend">Range</legend>
+                    <label class="habit-controls__radio">
+                      <input
+                        type="radio"
+                        name="habit-range"
+                        value="rolling"
+                        checked
+                      />
+                      Rolling year
+                    </label>
+                    <label class="habit-controls__radio">
+                      <input type="radio" name="habit-range" value="calendar" />
+                      Calendar year
+                    </label>
+                  </fieldset>
+                  <button
+                    id="btn-delete-habit"
+                    class="btn btn--danger btn--block"
+                    type="button"
+                  >
+                    Delete habit
+                  </button>
+                </div>
+              </div>
+            </header>
+
+            <div class="habit-controls">
+              <fieldset class="habit-controls__group">
+                <legend class="habit-controls__legend">Colors</legend>
+                <label class="habit-controls__color">
+                  <span class="habit-controls__label">Done</span>
+                  <input
+                    id="input-done-color"
+                    type="color"
+                    value="#22c55e"
+                  />
+                </label>
+                <label class="habit-controls__color">
+                  <span class="habit-controls__label">Not done</span>
+                  <input
+                    id="input-undone-color"
+                    type="color"
+                    value="#9ca3af"
+                  />
+                </label>
+                <label class="habit-controls__color">
+                  <span class="habit-controls__label">Today</span>
+                  <input
+                    id="input-today-outline-color"
+                    type="color"
+                    value="#2563eb"
+                  />
+                </label>
+              </fieldset>
+            </div>
+
+            <div
+              id="habit-weekdays"
+              class="habit-weekdays"
+              aria-hidden="true"
+            >
+              <span>S</span><span>M</span><span>T</span><span>W</span
+              ><span>T</span><span>F</span><span>S</span>
+            </div>
+
+            <div
+              id="habit-grid"
+              class="habit-grid habit-grid--week"
+              role="grid"
+              aria-label="Habit days"
+            ></div>
+
+            <p id="app-message" class="message message--error" hidden></p>
+          </main>
+
+          <div id="habit-empty" class="main main--empty">
+            <p class="main__empty-lead">Select a habit or create one.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="habits.js"></script>
+  </body>
+</html>

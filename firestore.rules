@@ -27,6 +27,78 @@ service cloud.firestore {
       return listData(listId).scope == 'shared';
     }
 
+    function isHabitColorPatch() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['updatedAt', 'doneColor'])
+        || changed.hasOnly(['updatedAt', 'undoneColor'])
+        || changed.hasOnly(['updatedAt', 'todayOutlineColor'])
+        || changed.hasOnly(['doneColor'])
+        || changed.hasOnly(['undoneColor'])
+        || changed.hasOnly(['todayOutlineColor'])
+        || changed.hasOnly(['updatedAt', 'doneColor', 'undoneColor'])
+        || changed.hasOnly(['updatedAt', 'doneColor', 'todayOutlineColor'])
+        || changed.hasOnly(['updatedAt', 'undoneColor', 'todayOutlineColor'])
+        || changed.hasOnly([
+          'updatedAt', 'doneColor', 'undoneColor', 'todayOutlineColor'
+        ]);
+    }
+
+    function isDoneDayKeysPatch() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasAll(['doneDayKeys'])
+        && !changed.hasAny([
+          'ownerUid', 'createdAt', 'name',
+          'doneColor', 'undoneColor', 'todayOutlineColor',
+        ]);
+    }
+
+    match /habits/{habitId} {
+      allow get: if isSignedIn()
+        && resource.data.ownerUid == request.auth.uid;
+
+      allow list: if isSignedIn()
+        && resource.data.ownerUid == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.keys().hasAll([
+          'name', 'ownerUid', 'doneColor', 'undoneColor', 'todayOutlineColor',
+          'doneDayKeys', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.doneColor is string
+        && request.resource.data.undoneColor is string
+        && request.resource.data.todayOutlineColor is string
+        && request.resource.data.doneDayKeys is list
+        && request.resource.data.doneDayKeys.size() <= 400;
+
+      allow update: if isSignedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['name', 'updatedAt'])
+          || isHabitColorPatch()
+          || isDoneDayKeysPatch()
+        )
+        && (!('name' in request.resource.data)
+          || (request.resource.data.name is string
+            && request.resource.data.name.size() > 0))
+        && (!('doneColor' in request.resource.data)
+          || request.resource.data.doneColor is string)
+        && (!('undoneColor' in request.resource.data)
+          || request.resource.data.undoneColor is string)
+        && (!('todayOutlineColor' in request.resource.data)
+          || request.resource.data.todayOutlineColor is string)
+        && (!('doneDayKeys' in request.resource.data)
+          || (request.resource.data.doneDayKeys is list
+            && request.resource.data.doneDayKeys.size() <= 400));
+
+      allow delete: if isSignedIn()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
     match /config/app {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn()

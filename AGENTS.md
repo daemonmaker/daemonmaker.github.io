@@ -1,9 +1,10 @@
 # AGENTS.md
 
-Static GitHub Pages site at https://daemonmaker.github.io. Two surfaces:
+Static GitHub Pages site at https://daemonmaker.github.io. Three surfaces:
 
 - Portfolio: `index.html` + `style.css`. LinkedIn is the only outbound link.
 - Grocery lists: unlisted app at `/grocery.html`. Do not link it from the portfolio.
+- Habit tracker: unlisted app at `/habits.html`. Do not link it from the portfolio.
 
 Plain files only. No build, no npm, no framework, no bundler.
 
@@ -75,19 +76,51 @@ Keep this rule in `grocery.css`:
 
 `.login { display: grid }` overrides the HTML `hidden` attribute. Without the `!important` rule, a successful sign-in still shows the login card and looks like a login loop. The signed-in shell is on the page underneath.
 
+## Habits app
+
+Files: `habits.html`, `habits.css`, `habits.js`, `habits-config.js`, `habits-grid.mjs`, `habits-grid.test.mjs`, `habits-state.mjs`, `habits-state.test.mjs`. Same Firebase project and auth domain as grocery. Does not import grocery or portfolio files.
+
+### Data model
+
+- `habits/{habitId}` — `name`, `ownerUid`, `doneColor`, `undoneColor`, `todayOutlineColor`, `doneDayKeys` (array of `yyyy-mm-dd` strings), `createdAt`, `updatedAt`. Owner-only; query `where ownerUid == auth.uid`. Toggle a day with `arrayUnion` / `arrayRemove` on `doneDayKeys` (missing field treated as empty in the UI).
+
+### UI
+
+Dot grid per habit: **Week grid** (7 columns, week starts Sunday) or **Wrapping row**. **Rolling year** (last 365 days through today, dots in reverse chronological order so today is at the top) or **Calendar year** (current year with leading padding; future days muted and not togglable). Per-habit done/undone/today-outline colors via color pickers (defaults green / grey / blue ring on today’s dot). Layout, range, and theme prefs in `localStorage` (`habits_layout`, `habits_range`, `habits_theme` as `system` | `light` | `dark`). Light mode is black text on white; dark mode is white on black. `system` uses `prefers-color-scheme`. Inline script in `habits.html` sets `data-habits-theme` on `<html>` before CSS loads to avoid a flash.
+
+Sidebar **My Habits** title with **user coin** (initial) on the right opening account menu (name, theme, sign out). Active-habit **hamburger** opens layout, range, and delete. Sidebar habit list scrolls (~3 rows visible); **+** creates a habit. Login page has theme buttons before sign-in.
+
+Date layout helpers live in `habits-grid.mjs` (`toDateKey`, `rollingDays`, `calendarYearDays`, `weekGridCells`, `wrapSequence`, `dayKeysForRange`). Done-state and UI prefs helpers live in `habits-state.mjs` (`doneDayKeysForHabit`, `isDayDoneForHabit`, `reconcilePendingDoneKeys`, `userCoinLetter`, `parseThemePref`, `parseLayoutPref`, `parseRangePref`).
+
+### Sign-in
+
+Same implicit Google redirect pattern as grocery with habits-specific keys:
+
+1. Inline script in `habits.html`: stash OAuth hash in `sessionStorage` `habits_oauth_hash`, strip hash, clear `firebase` session keys.
+2. `localStorage` `habits_google_oauth_nonce` for nonce verification.
+3. Prod redirect: `https://daemonmaker.github.io/habits.html` (`habits-config.js`). Local: `http://localhost:8000/habits.html`.
+
+Register those redirect URIs on the same Google OAuth web client as grocery.
+
+### CSS
+
+Keep the same `[hidden] { display: none !important; }` rule in `habits.css` as grocery (login grid vs signed-in shell).
+
 ## Local preview
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000/grocery.html`. The local server serves the working tree, so it is ahead of GitHub Pages until `main` is pushed.
+Open `http://localhost:8000/grocery.html` or `http://localhost:8000/habits.html`. The local server serves the working tree, so it is ahead of GitHub Pages until `main` is pushed.
 
-Item sort/check and meal helpers:
+Pure helper tests:
 
 ```bash
-node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs
+node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs habits-grid.test.mjs habits-state.test.mjs
 ```
+
+After habits rule changes, copy `firestore.rules` into the Firebase console and publish (same as grocery).
 
 ## Deploy
 
