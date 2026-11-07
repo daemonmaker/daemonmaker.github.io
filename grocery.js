@@ -82,6 +82,8 @@ const loginStatus = document.getElementById("login-status");
 const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
 const OAUTH_NONCE_KEY = "grocery_google_oauth_nonce";
 const THEME_KEY = "grocery_theme";
+const SIDEBAR_TAB_COOKIE = "grocery_sidebar_tab";
+const SIDEBAR_TAB_MAX_AGE_SEC = 60 * 60 * 24 * 365;
 const appMessage = document.getElementById("app-message");
 const userLabel = document.getElementById("user-label");
 const userCoinInitial = document.getElementById("user-coin-initial");
@@ -89,6 +91,9 @@ const btnUserMenu = document.getElementById("btn-user-menu");
 const userMenuPanel = document.getElementById("user-menu-panel");
 const themeRadios = document.querySelectorAll('input[name="grocery-theme"]');
 const loginThemeButtons = document.querySelectorAll("[data-grocery-theme-pick]");
+const sidebarTabButtons = document.querySelectorAll("[data-sidebar-tab]");
+const panelGrocery = document.getElementById("panel-grocery");
+const panelMeals = document.getElementById("panel-meals");
 const listSharedEl = document.getElementById("list-shared");
 const listPersonalEl = document.getElementById("list-personal");
 const activeListNameEl = document.getElementById("active-list-name");
@@ -172,6 +177,44 @@ function setThemeFromUI(mode) {
   applyTheme(next);
   localStorage.setItem(THEME_KEY, next);
   syncThemeRadios();
+}
+
+function parseSidebarTab(value) {
+  return value === "meals" ? "meals" : "grocery";
+}
+
+function readCookie(name) {
+  const prefix = `${encodeURIComponent(name)}=`;
+  const parts = document.cookie ? document.cookie.split("; ") : [];
+  for (const part of parts) {
+    if (part.startsWith(prefix)) {
+      return decodeURIComponent(part.slice(prefix.length));
+    }
+  }
+  return null;
+}
+
+function writeCookie(name, value, maxAgeSeconds) {
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(
+    value,
+  )}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
+}
+
+function applySidebarTab(tab) {
+  const next = parseSidebarTab(tab);
+  const showMeals = next === "meals";
+  if (panelGrocery) {
+    panelGrocery.hidden = showMeals;
+  }
+  if (panelMeals) {
+    panelMeals.hidden = !showMeals;
+  }
+  for (const button of sidebarTabButtons) {
+    const selected = button.getAttribute("data-sidebar-tab") === next;
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+    button.tabIndex = selected ? 0 : -1;
+  }
+  writeCookie(SIDEBAR_TAB_COOKIE, next, SIDEBAR_TAB_MAX_AGE_SEC);
 }
 
 function closeUserMenu() {
@@ -392,11 +435,8 @@ function renderListNav(container, lists, emptyLabel) {
   container.replaceChildren();
   if (!lists.length) {
     const empty = document.createElement("li");
-    empty.className = "list-nav__item";
+    empty.className = "list-nav__item list-nav__item--empty";
     empty.textContent = emptyLabel;
-    empty.style.color = "var(--text-muted)";
-    empty.style.fontSize = "0.9rem";
-    empty.style.padding = "0.45rem 0.5rem";
     container.appendChild(empty);
     return;
   }
@@ -441,11 +481,8 @@ function renderMealNav(container, meals, emptyLabel) {
   container.replaceChildren();
   if (!meals.length) {
     const empty = document.createElement("li");
-    empty.className = "list-nav__item";
+    empty.className = "list-nav__item list-nav__item--empty";
     empty.textContent = emptyLabel;
-    empty.style.color = "var(--text-muted)";
-    empty.style.fontSize = "0.9rem";
-    empty.style.padding = "0.45rem 0.5rem";
     container.appendChild(empty);
     return;
   }
@@ -2473,6 +2510,13 @@ document.addEventListener("keydown", (event) => {
 });
 
 setThemeFromUI(parseThemePref(localStorage.getItem(THEME_KEY)));
+applySidebarTab(readCookie(SIDEBAR_TAB_COOKIE));
+
+for (const button of sidebarTabButtons) {
+  button.addEventListener("click", () => {
+    applySidebarTab(button.getAttribute("data-sidebar-tab"));
+  });
+}
 
 async function initAuth() {
   showLogin();

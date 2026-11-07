@@ -93,7 +93,35 @@
         <div class="shell__body">
           <aside class="sidebar" aria-label="Lists">
             <div class="sidebar__title-row">
-              <h2 class="sidebar__heading">Lists</h2>
+              <div
+                class="sidebar__tabs"
+                role="tablist"
+                aria-label="Grocery or Meals"
+              >
+                <button
+                  type="button"
+                  class="sidebar__tab"
+                  id="tab-grocery"
+                  role="tab"
+                  aria-controls="panel-grocery"
+                  aria-selected="true"
+                  data-sidebar-tab="grocery"
+                >
+                  Grocery
+                </button>
+                <button
+                  type="button"
+                  class="sidebar__tab"
+                  id="tab-meals"
+                  role="tab"
+                  aria-controls="panel-meals"
+                  aria-selected="false"
+                  tabindex="-1"
+                  data-sidebar-tab="meals"
+                >
+                  Meals
+                </button>
+              </div>
               <div class="user-menu">
                 <button
                   type="button"
@@ -144,38 +172,84 @@
                 </div>
               </div>
             </div>
-            <div class="sidebar__group">
-              <h2 class="sidebar__heading">Shared</h2>
-              <ul id="list-shared" class="list-nav"></ul>
-              <button id="btn-new-shared" class="btn btn--text" type="button">
-                New shared list
-              </button>
+            <div
+              id="panel-grocery"
+              class="sidebar__panel"
+              role="tabpanel"
+              aria-labelledby="tab-grocery"
+            >
+              <div class="sidebar__group">
+                <div class="sidebar__heading-row">
+                  <h2 class="sidebar__heading">Shared</h2>
+                  <button
+                    id="btn-new-shared"
+                    class="btn-new-nav"
+                    type="button"
+                    aria-label="New shared list"
+                  >
+                    +
+                  </button>
+                </div>
+                <div class="list-nav__scroll">
+                  <ul id="list-shared" class="list-nav"></ul>
+                </div>
+              </div>
+              <div class="sidebar__group">
+                <div class="sidebar__heading-row">
+                  <h2 class="sidebar__heading">My lists</h2>
+                  <button
+                    id="btn-new-personal"
+                    class="btn-new-nav"
+                    type="button"
+                    aria-label="New personal list"
+                  >
+                    +
+                  </button>
+                </div>
+                <div class="list-nav__scroll">
+                  <ul id="list-personal" class="list-nav"></ul>
+                </div>
+              </div>
             </div>
-            <div class="sidebar__group">
-              <h2 class="sidebar__heading">My lists</h2>
-              <ul id="list-personal" class="list-nav"></ul>
-              <button id="btn-new-personal" class="btn btn--text" type="button">
-                New personal list
-              </button>
-            </div>
-            <div class="sidebar__group">
-              <h2 class="sidebar__heading">Meals</h2>
-              <ul id="list-meals-shared" class="list-nav"></ul>
-              <button
-                id="btn-new-shared-meal"
-                class="btn btn--text"
-                type="button"
-              >
-                New shared meal
-              </button>
-              <ul id="list-meals-personal" class="list-nav"></ul>
-              <button
-                id="btn-new-personal-meal"
-                class="btn btn--text"
-                type="button"
-              >
-                New personal meal
-              </button>
+            <div
+              id="panel-meals"
+              class="sidebar__panel"
+              role="tabpanel"
+              aria-labelledby="tab-meals"
+              hidden
+            >
+              <div class="sidebar__group">
+                <div class="sidebar__heading-row">
+                  <h2 class="sidebar__heading">Shared</h2>
+                  <button
+                    id="btn-new-shared-meal"
+                    class="btn-new-nav"
+                    type="button"
+                    aria-label="New shared meal"
+                  >
+                    +
+                  </button>
+                </div>
+                <div class="list-nav__scroll">
+                  <ul id="list-meals-shared" class="list-nav"></ul>
+                </div>
+              </div>
+              <div class="sidebar__group">
+                <div class="sidebar__heading-row">
+                  <h2 class="sidebar__heading">My meals</h2>
+                  <button
+                    id="btn-new-personal-meal"
+                    class="btn-new-nav"
+                    type="button"
+                    aria-label="New personal meal"
+                  >
+                    +
+                  </button>
+                </div>
+                <div class="list-nav__scroll">
+                  <ul id="list-meals-personal" class="list-nav"></ul>
+                </div>
+              </div>
             </div>
           </aside>
 
