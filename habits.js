@@ -38,6 +38,7 @@ import {
   HABITS_ACTIVE_HABIT_FIELD,
   preferCloudSelectionId,
   shouldMigrateLocalSelectionToCloud,
+  remoteSelectionShouldApply,
 } from "./app-prefs.mjs";
 import { loadSharedThemePref, saveSharedThemePref } from "./app-theme.mjs";
 import {
@@ -125,6 +126,7 @@ const state = {
   /** @type {Record<string, boolean>} `habitId:dateKey` -> desired done while write is in flight */
   pendingDoneKeys: {},
   ready: false,
+  cloudHabitsActiveId: null,
 };
 
 const unsubscribers = [];
@@ -214,19 +216,32 @@ function setActiveHabitId(habitId, { persist = true } = {}) {
   }
 }
 
-function applyCloudHabitsActivePref(cloudRaw) {
-  const cloudId = parseStoredHabitId(cloudRaw);
-  if (!cloudId || cloudId === state.activeHabitId) {
+function applyCloudHabitsActiveSelection() {
+  const cloudId = state.cloudHabitsActiveId;
+  if (!cloudId) {
     return;
   }
-  if (state.habits.some((h) => h.id === cloudId)) {
-    setActiveHabitId(cloudId, { persist: false });
+  if (!remoteSelectionShouldApply({
+    remoteId: cloudId,
+    activeId: state.activeHabitId,
+  })) {
     return;
   }
   if (!state.habits.length) {
     state.activeHabitId = cloudId;
     syncActiveHabitLocal(cloudId);
+    return;
   }
+  if (!state.habits.some((h) => h.id === cloudId)) {
+    return;
+  }
+  setActiveHabitId(cloudId, { persist: false });
+  renderAll();
+}
+
+function rememberCloudHabitsActivePref(cloudRaw) {
+  state.cloudHabitsActiveId = parseStoredHabitId(cloudRaw);
+  applyCloudHabitsActiveSelection();
 }
 
 function subscribeUserPrefs(uid) {
@@ -235,9 +250,10 @@ function subscribeUserPrefs(uid) {
     prefRef,
     (snap) => {
       if (!snap.exists()) {
+        state.cloudHabitsActiveId = null;
         return;
       }
-      applyCloudHabitsActivePref(snap.data()[HABITS_ACTIVE_HABIT_FIELD]);
+      rememberCloudHabitsActivePref(snap.data()[HABITS_ACTIVE_HABIT_FIELD]);
     },
     (error) => {
       console.warn("Could not subscribe to habit preferences.", error);
@@ -657,6 +673,7 @@ function subscribeHabits(uid) {
         id: docSnap.id,
         ...docSnap.data(),
       }));
+      applyCloudHabitsActiveSelection();
       const nextId = pickActiveHabitId({
         preferredId: state.activeHabitId,
         habits: state.habits,
@@ -883,7 +900,9 @@ async function startSession(user) {
 
     renderUserMenuApps(accessDoc, "habits");
     showApp();
-    state.activeHabitId = await loadHabitsActiveHabitPreference(user.uid);
+    const preferredHabitId = await loadHabitsActiveHabitPreference(user.uid);
+    state.activeHabitId = preferredHabitId;
+    state.cloudHabitsActiveId = preferredHabitId;
     syncActiveHabitLocal(state.activeHabitId);
     subscribeHabits(user.uid);
     subscribeUserPrefs(user.uid);

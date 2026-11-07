@@ -4,6 +4,7 @@ import {
   parseStoredSelectionId,
   preferCloudSelectionId,
   shouldMigrateLocalSelectionToCloud,
+  remoteSelectionShouldApply,
 } from "./app-prefs.mjs";
 
 describe("parseStoredSelectionId", () => {
@@ -35,6 +36,26 @@ describe("preferCloudSelectionId", () => {
 
   it("returns null when both missing", () => {
     assert.equal(preferCloudSelectionId({}), null);
+  });
+});
+
+describe("remoteSelectionShouldApply", () => {
+  it("is false when remote is missing", () => {
+    assert.equal(remoteSelectionShouldApply({ remoteId: null, activeId: "a" }), false);
+  });
+
+  it("is true when remote differs from active", () => {
+    assert.equal(
+      remoteSelectionShouldApply({ remoteId: "b", activeId: "a" }),
+      true,
+    );
+  });
+
+  it("is false when remote matches active", () => {
+    assert.equal(
+      remoteSelectionShouldApply({ remoteId: "a", activeId: "a" }),
+      false,
+    );
   });
 });
 

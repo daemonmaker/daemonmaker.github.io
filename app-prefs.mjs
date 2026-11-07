@@ -29,3 +29,19 @@ export function shouldMigrateLocalSelectionToCloud({
 } = {}) {
   return !parseStoredSelectionId(cloud) && !!parseStoredSelectionId(local);
 }
+
+/**
+ * Whether a remote prefs snapshot should change the active selection.
+ * @param {{ remoteId?: unknown, activeId?: unknown }} args
+ */
+export function remoteSelectionShouldApply({
+  remoteId = null,
+  activeId = null,
+} = {}) {
+  const remote = parseStoredSelectionId(remoteId);
+  if (!remote) {
+    return false;
+  }
+  const active = parseStoredSelectionId(activeId);
+  return remote !== active;
+}

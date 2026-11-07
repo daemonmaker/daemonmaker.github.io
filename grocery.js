@@ -32,6 +32,7 @@ import {
   GROCERY_ACTIVE_LIST_FIELD,
   preferCloudSelectionId,
   shouldMigrateLocalSelectionToCloud,
+  remoteSelectionShouldApply,
 } from "./app-prefs.mjs";
 import { loadSharedThemePref, saveSharedThemePref } from "./app-theme.mjs";
 import { matchMealItems, itemsToAdd } from "./grocery-meals.mjs";
@@ -161,6 +162,8 @@ const state = {
   ready: false,
   sharedListsReady: false,
   personalListsReady: false,
+  cloudGroceryListId: null,
+  pendingListItemsResubscribe: false,
   mealDialogMealId: null,
   mealDialogMealItems: [],
   editingMealDialogTarget: null,
@@ -278,19 +281,34 @@ function setActiveListId(
   }
 }
 
-function applyCloudGroceryListPref(cloudRaw) {
-  const cloudId = parseStoredListId(cloudRaw);
-  if (!cloudId || cloudId === state.activeListId) {
+function applyCloudGroceryListSelection() {
+  const cloudId = state.cloudGroceryListId;
+  if (!cloudId) {
     return;
   }
-  if (getListById(cloudId)) {
-    setActiveListId(cloudId, { persist: false });
+  if (!remoteSelectionShouldApply({
+    remoteId: cloudId,
+    activeId: state.activeListId,
+  })) {
     return;
   }
   if (!state.sharedListsReady || !state.personalListsReady) {
     state.activeListId = cloudId;
     syncActiveListLocal(cloudId);
+    state.pendingListItemsResubscribe = true;
+    return;
   }
+  if (!getListById(cloudId)) {
+    return;
+  }
+  state.pendingListItemsResubscribe = false;
+  setActiveListId(cloudId, { persist: false });
+  renderAll();
+}
+
+function rememberCloudGroceryListPref(cloudRaw) {
+  state.cloudGroceryListId = parseStoredListId(cloudRaw);
+  applyCloudGroceryListSelection();
 }
 
 function subscribeUserPrefs(uid) {
@@ -299,9 +317,10 @@ function subscribeUserPrefs(uid) {
     prefRef,
     (snap) => {
       if (!snap.exists()) {
+        state.cloudGroceryListId = null;
         return;
       }
-      applyCloudGroceryListPref(snap.data()[GROCERY_ACTIVE_LIST_FIELD]);
+      rememberCloudGroceryListPref(snap.data()[GROCERY_ACTIVE_LIST_FIELD]);
     },
     (error) => {
       console.warn("Could not subscribe to grocery preferences.", error);
@@ -2243,9 +2262,18 @@ function subscribeMealEditorItems(mealId) {
 }
 
 function ensureActiveList() {
+  if (state.sharedListsReady && state.personalListsReady) {
+    applyCloudGroceryListSelection();
+  }
+
   const activeStillVisible = getListById(state.activeListId);
   if (activeStillVisible) {
     syncActiveListLocal(state.activeListId);
+    if (state.pendingListItemsResubscribe) {
+      state.pendingListItemsResubscribe = false;
+      subscribeItems();
+      renderAll();
+    }
     return;
   }
 
@@ -2817,7 +2845,9 @@ async function startSession(user) {
 
     renderUserMenuApps(accessDoc, "grocery");
     showApp();
-    state.activeListId = await loadGroceryActiveListPreference(user.uid);
+    const preferredListId = await loadGroceryActiveListPreference(user.uid);
+    state.activeListId = preferredListId;
+    state.cloudGroceryListId = preferredListId;
     syncActiveListLocal(state.activeListId);
     await ensureBootstrap();
     subscribeConfig();
