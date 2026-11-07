@@ -34,7 +34,6 @@ import {
   adminRosterSort,
   accessDocIdForEmail,
   userCoinLetter,
-  parseThemePref,
 } from "./apps-access.mjs";
 import {
   trashIconSvg,
@@ -42,8 +41,8 @@ import {
   syncRosterSwipePresentation,
   closeOpenRosterSwipe,
 } from "./apps-roster-swipe.mjs";
+import { loadSharedThemePref, saveSharedThemePref } from "./app-theme.mjs";
 
-const THEME_KEY = "apps_theme";
 const OAUTH_NONCE_KEY = "apps_google_oauth_nonce";
 
 const firebaseConfig = {
@@ -106,7 +105,7 @@ function applyTheme(mode) {
 }
 
 function syncThemeRadios() {
-  const mode = parseThemePref(localStorage.getItem(THEME_KEY));
+  const mode = loadSharedThemePref(localStorage);
   for (const radio of themeRadios) {
     radio.checked = radio.value === mode;
   }
@@ -118,10 +117,8 @@ function syncThemeRadios() {
 }
 
 function setThemeFromUI(mode) {
-  const next =
-    mode === "light" || mode === "dark" || mode === "system" ? mode : "system";
+  const next = saveSharedThemePref(mode, localStorage);
   applyTheme(next);
-  localStorage.setItem(THEME_KEY, next);
   syncThemeRadios();
 }
 
@@ -712,7 +709,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-setThemeFromUI(parseThemePref(localStorage.getItem(THEME_KEY)));
+setThemeFromUI(loadSharedThemePref(localStorage));
 
 async function initAuth() {
   showLogin();

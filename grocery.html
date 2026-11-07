@@ -11,7 +11,18 @@
     <link rel="icon" href="data:," />
     <script>
       (function () {
-        var theme = localStorage.getItem("grocery_theme");
+        var key = "micro_apps_theme";
+        var theme = localStorage.getItem(key);
+        if (theme !== "light" && theme !== "dark" && theme !== "system") {
+          var legacy = ["apps_theme", "grocery_theme", "habits_theme"];
+          for (var i = 0; i < legacy.length; i++) {
+            var pick = localStorage.getItem(legacy[i]);
+            if (pick === "light" || pick === "dark" || pick === "system") {
+              theme = pick;
+              break;
+            }
+          }
+        }
         if (theme !== "light" && theme !== "dark" && theme !== "system") {
           theme = "system";
         }

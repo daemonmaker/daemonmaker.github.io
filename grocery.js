@@ -33,6 +33,7 @@ import {
   preferCloudSelectionId,
   shouldMigrateLocalSelectionToCloud,
 } from "./app-prefs.mjs";
+import { loadSharedThemePref, saveSharedThemePref } from "./app-theme.mjs";
 import { matchMealItems, itemsToAdd } from "./grocery-meals.mjs";
 import {
   mealEditorDeleteAction,
@@ -50,7 +51,6 @@ import {
   accessDocIdForEmail,
   bindUidWrite,
   userCoinLetter,
-  parseThemePref,
   userMenuAppLinks,
 } from "./apps-access.mjs";
 import {
@@ -95,7 +95,6 @@ const loginError = document.getElementById("login-error");
 const loginStatus = document.getElementById("login-status");
 const btnGoogleSignIn = document.getElementById("btn-google-sign-in");
 const OAUTH_NONCE_KEY = "grocery_google_oauth_nonce";
-const THEME_KEY = "grocery_theme";
 const ACTIVE_LIST_KEY = "grocery_active_list";
 const SIDEBAR_TAB_COOKIE = "grocery_sidebar_tab";
 const SIDEBAR_TAB_MAX_AGE_SEC = 60 * 60 * 24 * 365;
@@ -190,7 +189,7 @@ function applyTheme(mode) {
 }
 
 function syncThemeRadios() {
-  const mode = parseThemePref(localStorage.getItem(THEME_KEY));
+  const mode = loadSharedThemePref(localStorage);
   for (const radio of themeRadios) {
     radio.checked = radio.value === mode;
   }
@@ -202,11 +201,18 @@ function syncThemeRadios() {
 }
 
 function setThemeFromUI(mode) {
-  const next =
-    mode === "light" || mode === "dark" || mode === "system" ? mode : "system";
+  const next = saveSharedThemePref(mode, localStorage);
   applyTheme(next);
-  localStorage.setItem(THEME_KEY, next);
   syncThemeRadios();
+}
+
+function syncActiveListLocal(listId) {
+  const stored = parseStoredListId(listId);
+  if (stored) {
+    localStorage.setItem(ACTIVE_LIST_KEY, stored);
+  } else {
+    localStorage.removeItem(ACTIVE_LIST_KEY);
+  }
 }
 
 function persistGroceryActiveListCloud(listId) {
@@ -225,7 +231,9 @@ function persistGroceryActiveListCloud(listId) {
         [GROCERY_ACTIVE_LIST_FIELD]: deleteField(),
         updatedAt: serverTimestamp(),
       };
-  return setDoc(ref, payload, { merge: true }).catch(() => {});
+  return setDoc(ref, payload, { merge: true }).catch((error) => {
+    console.warn("Could not save grocery list preference.", error);
+  });
 }
 
 async function loadGroceryActiveListPreference(uid) {
@@ -236,7 +244,8 @@ async function loadGroceryActiveListPreference(uid) {
     if (snap.exists()) {
       cloudRaw = snap.data()[GROCERY_ACTIVE_LIST_FIELD];
     }
-  } catch {
+  } catch (error) {
+    console.warn("Could not load grocery list preference.", error);
     return preferCloudSelectionId({ cloud: null, local: localId });
   }
   if (
@@ -248,23 +257,57 @@ async function loadGroceryActiveListPreference(uid) {
 }
 
 function rememberActiveListId(listId) {
-  const stored = parseStoredListId(listId);
-  if (stored) {
-    localStorage.setItem(ACTIVE_LIST_KEY, stored);
-  } else {
-    localStorage.removeItem(ACTIVE_LIST_KEY);
-  }
-  void persistGroceryActiveListCloud(stored);
+  syncActiveListLocal(listId);
+  void persistGroceryActiveListCloud(listId);
 }
 
-function setActiveListId(listId, { resubscribe = true } = {}) {
+function setActiveListId(
+  listId,
+  { resubscribe = true, persist = true } = {},
+) {
   const next = parseStoredListId(listId);
   const changed = state.activeListId !== next;
   state.activeListId = next;
-  rememberActiveListId(next);
+  if (persist) {
+    rememberActiveListId(next);
+  } else {
+    syncActiveListLocal(next);
+  }
   if (changed && resubscribe) {
     subscribeItems();
   }
+}
+
+function applyCloudGroceryListPref(cloudRaw) {
+  const cloudId = parseStoredListId(cloudRaw);
+  if (!cloudId || cloudId === state.activeListId) {
+    return;
+  }
+  if (getListById(cloudId)) {
+    setActiveListId(cloudId, { persist: false });
+    return;
+  }
+  if (!state.sharedListsReady || !state.personalListsReady) {
+    state.activeListId = cloudId;
+    syncActiveListLocal(cloudId);
+  }
+}
+
+function subscribeUserPrefs(uid) {
+  const prefRef = doc(db, "prefs", uid);
+  const unsub = onSnapshot(
+    prefRef,
+    (snap) => {
+      if (!snap.exists()) {
+        return;
+      }
+      applyCloudGroceryListPref(snap.data()[GROCERY_ACTIVE_LIST_FIELD]);
+    },
+    (error) => {
+      console.warn("Could not subscribe to grocery preferences.", error);
+    },
+  );
+  unsubscribers.push(unsub);
 }
 
 function readCookie(name) {
@@ -2202,7 +2245,7 @@ function subscribeMealEditorItems(mealId) {
 function ensureActiveList() {
   const activeStillVisible = getListById(state.activeListId);
   if (activeStillVisible) {
-    rememberActiveListId(state.activeListId);
+    syncActiveListLocal(state.activeListId);
     return;
   }
 
@@ -2775,8 +2818,10 @@ async function startSession(user) {
     renderUserMenuApps(accessDoc, "grocery");
     showApp();
     state.activeListId = await loadGroceryActiveListPreference(user.uid);
+    syncActiveListLocal(state.activeListId);
     await ensureBootstrap();
     subscribeConfig();
+    subscribeUserPrefs(user.uid);
     subscribeLists(user.uid);
     subscribeMeals(user.uid);
 
@@ -2787,7 +2832,7 @@ async function startSession(user) {
     if (!state.activeListId) {
       setActiveListId(state.defaultListId, { resubscribe: false });
     } else {
-      rememberActiveListId(state.activeListId);
+      syncActiveListLocal(state.activeListId);
     }
     state.ready = true;
     ensureActiveList();
@@ -3036,7 +3081,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-setThemeFromUI(parseThemePref(localStorage.getItem(THEME_KEY)));
+setThemeFromUI(loadSharedThemePref(localStorage));
 applySidebarTab(readCookie(SIDEBAR_TAB_COOKIE));
 
 for (const button of sidebarTabButtons) {

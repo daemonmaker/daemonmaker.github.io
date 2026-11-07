@@ -26,7 +26,7 @@ The three Firebase apps share one tight, menu-driven chrome. Keep them aligned; 
 ### Theme
 
 - Modes: `system` | `light` | `dark`. `system` follows `prefers-color-scheme`.
-- Per-app `localStorage` keys: `apps_theme`, `grocery_theme`, `habits_theme`.
+- Shared theme `localStorage` key: `micro_apps_theme` (read/write via `app-theme.mjs`; migrates legacy `apps_theme`, `grocery_theme`, `habits_theme` on load).
 - Inline head script sets `data-apps-theme` / `data-grocery-theme` / `data-habits-theme` on `<html>` before CSS loads to avoid a flash.
 - Login: System / Light / Dark buttons before sign-in.
 - Signed-in: theme radios live in the user-coin account menu (`.theme-controls.theme-controls--menu`).
@@ -119,7 +119,7 @@ Files: `habits.html`, `habits.css`, `habits.js`, `habits-config.js`, `habits-gri
 
 ### UI
 
-Follow [Shared app chrome](#shared-app-chrome-apps-grocery-habits). Dot grid per habit: **Week grid** (7 columns, week starts Sunday) or **Wrapping row**. **Rolling year** (last 365 days through today, dots in reverse chronological order so today is at the top) or **Calendar year** (current year with leading padding; future days muted and not togglable). Per-habit done/undone/today-outline colors via color pickers (defaults green / grey / blue ring on today’s dot). Layout and range prefs in `localStorage` (`habits_layout`, `habits_range`); theme uses `habits_theme` per Shared app chrome.
+Follow [Shared app chrome](#shared-app-chrome-apps-grocery-habits). Dot grid per habit: **Week grid** (7 columns, week starts Sunday) or **Wrapping row**. **Rolling year** (last 365 days through today, dots in reverse chronological order so today is at the top) or **Calendar year** (current year with leading padding; future days muted and not togglable). Per-habit done/undone/today-outline colors via color pickers (defaults green / grey / blue ring on today’s dot). Layout and range prefs in `localStorage` (`habits_layout`, `habits_range`); theme uses shared `micro_apps_theme` per Shared app chrome.
 
 Sidebar **My Habits** with **user coin**; active-habit **hamburger** for layout, range, and delete. Sidebar habit list scrolls (~3 rows visible); **+** creates a habit.
 
@@ -183,7 +183,7 @@ Open `http://localhost:8000/grocery.html`, `http://localhost:8000/habits.html`, 
 Pure helper tests:
 
 ```bash
-node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs grocery-prefs.test.mjs app-prefs.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs apps-roster-swipe.test.mjs
+node --test grocery-items.test.mjs grocery-meals.test.mjs grocery-meal-editor.test.mjs grocery-prefs.test.mjs app-prefs.test.mjs app-theme.test.mjs habits-grid.test.mjs habits-state.test.mjs apps-access.test.mjs apps-roster-swipe.test.mjs
 ```
 
 After access or habits rule changes, copy `firestore.rules` into the Firebase console and publish (same as grocery).

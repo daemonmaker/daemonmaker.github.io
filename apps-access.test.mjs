@@ -262,8 +262,15 @@ describe("userCoinLetter", () => {
 });
 
 describe("parseThemePref", () => {
+  it("accepts light, dark, and system", () => {
+    assert.equal(parseThemePref("light"), "light");
+    assert.equal(parseThemePref("dark"), "dark");
+    assert.equal(parseThemePref("system"), "system");
+  });
+
   it("defaults to system", () => {
     assert.equal(parseThemePref(undefined), "system");
-    assert.equal(parseThemePref("light"), "light");
+    assert.equal(parseThemePref("neon"), "system");
+    assert.equal(parseThemePref(null), "system");
   });
 });

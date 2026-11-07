@@ -23,7 +23,6 @@ import {
   isDayDoneForHabit,
   reconcilePendingDoneKeys as reconcilePendingDoneKeysPure,
   userCoinLetter,
-  parseThemePref,
   parseLayoutPref,
   parseRangePref,
   parseStoredHabitId,
@@ -40,6 +39,7 @@ import {
   preferCloudSelectionId,
   shouldMigrateLocalSelectionToCloud,
 } from "./app-prefs.mjs";
+import { loadSharedThemePref, saveSharedThemePref } from "./app-theme.mjs";
 import {
   getFirestore,
   collection,
@@ -63,7 +63,6 @@ const DEFAULT_UNDONE_COLOR = "#9ca3af";
 const DEFAULT_TODAY_OUTLINE_COLOR = "#2563eb";
 const LAYOUT_KEY = "habits_layout";
 const RANGE_KEY = "habits_range";
-const THEME_KEY = "habits_theme";
 const ACTIVE_HABIT_KEY = "habits_active_habit";
 
 const firebaseConfig = {
@@ -140,7 +139,7 @@ function persistRangePref(value) {
 }
 
 function readThemePref() {
-  return parseThemePref(localStorage.getItem(THEME_KEY));
+  return loadSharedThemePref(localStorage);
 }
 
 function applyTheme(mode) {
@@ -148,7 +147,16 @@ function applyTheme(mode) {
 }
 
 function persistThemePref(value) {
-  localStorage.setItem(THEME_KEY, value);
+  saveSharedThemePref(value, localStorage);
+}
+
+function syncActiveHabitLocal(habitId) {
+  const stored = parseStoredHabitId(habitId);
+  if (stored) {
+    localStorage.setItem(ACTIVE_HABIT_KEY, stored);
+  } else {
+    localStorage.removeItem(ACTIVE_HABIT_KEY);
+  }
 }
 
 function persistHabitsActiveHabitCloud(habitId) {
@@ -167,7 +175,9 @@ function persistHabitsActiveHabitCloud(habitId) {
         [HABITS_ACTIVE_HABIT_FIELD]: deleteField(),
         updatedAt: serverTimestamp(),
       };
-  return setDoc(ref, payload, { merge: true }).catch(() => {});
+  return setDoc(ref, payload, { merge: true }).catch((error) => {
+    console.warn("Could not save habit preference.", error);
+  });
 }
 
 async function loadHabitsActiveHabitPreference(uid) {
@@ -178,7 +188,8 @@ async function loadHabitsActiveHabitPreference(uid) {
     if (snap.exists()) {
       cloudRaw = snap.data()[HABITS_ACTIVE_HABIT_FIELD];
     }
-  } catch {
+  } catch (error) {
+    console.warn("Could not load habit preference.", error);
     return preferCloudSelectionId({ cloud: null, local: localId });
   }
   if (
@@ -190,18 +201,49 @@ async function loadHabitsActiveHabitPreference(uid) {
 }
 
 function rememberActiveHabitId(habitId) {
-  const stored = parseStoredHabitId(habitId);
-  if (stored) {
-    localStorage.setItem(ACTIVE_HABIT_KEY, stored);
-  } else {
-    localStorage.removeItem(ACTIVE_HABIT_KEY);
-  }
-  void persistHabitsActiveHabitCloud(stored);
+  syncActiveHabitLocal(habitId);
+  void persistHabitsActiveHabitCloud(habitId);
 }
 
-function setActiveHabitId(habitId) {
+function setActiveHabitId(habitId, { persist = true } = {}) {
   state.activeHabitId = parseStoredHabitId(habitId);
-  rememberActiveHabitId(state.activeHabitId);
+  if (persist) {
+    rememberActiveHabitId(state.activeHabitId);
+  } else {
+    syncActiveHabitLocal(state.activeHabitId);
+  }
+}
+
+function applyCloudHabitsActivePref(cloudRaw) {
+  const cloudId = parseStoredHabitId(cloudRaw);
+  if (!cloudId || cloudId === state.activeHabitId) {
+    return;
+  }
+  if (state.habits.some((h) => h.id === cloudId)) {
+    setActiveHabitId(cloudId, { persist: false });
+    return;
+  }
+  if (!state.habits.length) {
+    state.activeHabitId = cloudId;
+    syncActiveHabitLocal(cloudId);
+  }
+}
+
+function subscribeUserPrefs(uid) {
+  const prefRef = doc(db, "prefs", uid);
+  const unsub = onSnapshot(
+    prefRef,
+    (snap) => {
+      if (!snap.exists()) {
+        return;
+      }
+      applyCloudHabitsActivePref(snap.data()[HABITS_ACTIVE_HABIT_FIELD]);
+    },
+    (error) => {
+      console.warn("Could not subscribe to habit preferences.", error);
+    },
+  );
+  unsubscribers.push(unsub);
 }
 
 function syncThemeRadios() {
@@ -273,10 +315,8 @@ function toggleHabitMenu() {
 }
 
 function setThemeFromUI(mode) {
-  const next =
-    mode === "light" || mode === "dark" || mode === "system" ? mode : "system";
+  const next = saveSharedThemePref(mode, localStorage);
   applyTheme(next);
-  persistThemePref(next);
   syncThemeRadios();
 }
 
@@ -621,7 +661,11 @@ function subscribeHabits(uid) {
         preferredId: state.activeHabitId,
         habits: state.habits,
       });
-      setActiveHabitId(nextId);
+      if (nextId !== state.activeHabitId) {
+        setActiveHabitId(nextId);
+      } else {
+        syncActiveHabitLocal(state.activeHabitId);
+      }
       reconcilePendingDoneKeys(getActiveHabit());
       renderAll();
     },
@@ -840,7 +884,9 @@ async function startSession(user) {
     renderUserMenuApps(accessDoc, "habits");
     showApp();
     state.activeHabitId = await loadHabitsActiveHabitPreference(user.uid);
+    syncActiveHabitLocal(state.activeHabitId);
     subscribeHabits(user.uid);
+    subscribeUserPrefs(user.uid);
     state.ready = true;
     renderAll();
   } catch (error) {

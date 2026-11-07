@@ -158,13 +158,6 @@ service cloud.firestore {
           || request.resource.data.updatedAt is timestamp);
     }
 
-    function isPrefsPatch() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly([
-        'groceryActiveListId', 'habitsActiveHabitId', 'updatedAt'
-      ]);
-    }
-
     match /config/admins {
       allow read: if isSignedIn();
       allow create: if isSeedAdmin()
@@ -203,14 +196,9 @@ service cloud.firestore {
     }
 
     match /prefs/{uid} {
-      allow get: if isSignedIn() && request.auth.uid == uid;
-      allow list: if false;
-      allow create: if isSignedIn()
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isSignedIn()
         && request.auth.uid == uid
-        && isPrefsResourceValid();
-      allow update: if isSignedIn()
-        && request.auth.uid == uid
-        && isPrefsPatch()
         && isPrefsResourceValid();
       allow delete: if false;
     }
