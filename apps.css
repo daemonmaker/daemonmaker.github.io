@@ -436,7 +436,8 @@ body {
 .field__input {
   width: 100%;
   padding: var(--input-pad-y) var(--input-pad-x);
-  font-size: 0.9rem;
+  /* iOS zooms focused controls under 16px. */
+  font-size: max(16px, 0.9rem);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   background: var(--surface);
@@ -489,7 +490,7 @@ body {
     ):not([type="file"]),
   select,
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 

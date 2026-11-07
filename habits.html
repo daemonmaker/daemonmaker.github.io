@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
     <title>Habit tracker</title>
     <meta name="description" content="Track daily habits." />
     <link rel="icon" href="data:," />
@@ -112,6 +115,11 @@
                   role="menu"
                 >
                   <p id="user-label" class="user-menu__name"></p>
+                  <nav
+                    id="user-menu-apps"
+                    class="user-menu__apps"
+                    aria-label="Your apps"
+                  ></nav>
                   <fieldset class="theme-controls theme-controls--menu">
                     <legend class="theme-controls__legend">Theme</legend>
                     <label class="theme-controls__option">
@@ -132,11 +140,6 @@
                       Dark
                     </label>
                   </fieldset>
-                  <nav
-                    id="user-menu-apps"
-                    class="user-menu__apps"
-                    aria-label="Your apps"
-                  ></nav>
                   <button
                     id="btn-sign-out"
                     class="btn btn--ghost btn--block"
