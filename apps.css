@@ -482,6 +482,17 @@ body {
   }
 }
 
+@media (max-width: 720px) {
+  /* iOS zooms focused controls under 16px; keep page scale stable. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(
+      [type="range"]
+    ):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 .roster__email {
   margin: 0;
   font-weight: 500;

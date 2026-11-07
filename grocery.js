@@ -1629,7 +1629,7 @@ function bindItemSwipe(front, itemId) {
     axis = null;
     dragging = true;
     moved = false;
-    front.setPointerCapture(pointerId);
+    // Capture only after a horizontal swipe is confirmed so name clicks still work.
   });
 
   front.addEventListener("pointermove", (event) => {
@@ -1645,15 +1645,16 @@ function bindItemSwipe(front, itemId) {
       axis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
       if (axis === "y") {
         dragging = false;
-        try {
-          front.releasePointerCapture(pointerId);
-        } catch {
-          /* already released */
-        }
+        pointerId = null;
         return;
       }
       if (state.openSwipeItemId && state.openSwipeItemId !== itemId) {
         closeOpenItemSwipe({ animate: false });
+      }
+      try {
+        front.setPointerCapture(pointerId);
+      } catch {
+        /* unsupported or already released */
       }
     }
     if (axis !== "x") {
@@ -1673,11 +1674,20 @@ function bindItemSwipe(front, itemId) {
     if (!dragging || event.pointerId !== pointerId) {
       return;
     }
+    const activePointerId = pointerId;
     dragging = false;
     const li = front.closest(".items__row");
-    if (!li || axis !== "x") {
-      pointerId = null;
-      axis = null;
+    const wasHorizontal = axis === "x";
+    pointerId = null;
+    axis = null;
+    if (front.hasPointerCapture?.(activePointerId)) {
+      try {
+        front.releasePointerCapture(activePointerId);
+      } catch {
+        /* already released */
+      }
+    }
+    if (!li || !wasHorizontal) {
       return;
     }
     const dx = event.clientX - startX;
@@ -1694,8 +1704,6 @@ function bindItemSwipe(front, itemId) {
       li.classList.remove("is-revealed");
       setItemSwipeOffset(li, 0);
     }
-    pointerId = null;
-    axis = null;
   }
 
   front.addEventListener("pointerup", endSwipe);
@@ -1704,11 +1712,12 @@ function bindItemSwipe(front, itemId) {
   front.addEventListener(
     "click",
     (event) => {
-      if (moved) {
-        event.preventDefault();
-        event.stopPropagation();
-        moved = false;
+      if (!moved) {
+        return;
       }
+      event.preventDefault();
+      event.stopPropagation();
+      moved = false;
     },
     true,
   );
